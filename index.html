@@ -31,6 +31,7 @@
   --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a;
   --hl-h:#5b2620; --hl-s:#4d3b12; --hl-t:#1d3452; --banner:#3a2f14; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font:15px/1.7 var(--font);padding-inline:16px;padding-block:0 80px}
 .wrap{max-width:900px;margin:0 auto}
@@ -69,11 +70,11 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
 .segprog{height:3px;background:var(--soft);border-radius:2px;margin-top:6px;overflow:hidden}
 .segprog i{display:block;height:100%;width:0;background:var(--muted)}
 .banner{background:var(--banner);border:1px solid var(--warn);border-radius:8px;padding:6px 10px;font-size:13px;margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.stats{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:12px}
+.stats{display:flex;flex-wrap:wrap;gap:6px;margin-block:6px 2px;font-size:12px}
 .chip{font:500 12px var(--mono);padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .chip.t,.chip.w{color:var(--warn);border-color:var(--warn)} .chip.d{color:var(--accent);border-color:var(--accent)} .chip.e{color:var(--err);border-color:var(--err)}
 button.chip{cursor:pointer;background:none}
-.sess{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.sess{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px}
 .sess select,.sess input{width:auto;min-width:160px;flex:1}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:10px;overflow-x:auto}
 .tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted);white-space:nowrap}
@@ -121,7 +122,7 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
 .items .item{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
 .items .q{font-weight:500}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(470px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:30;overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;align-content:start;box-shadow:-8px 0 24px rgba(0,0,0,.14)}
-@media (max-width:720px){.drawer{top:auto;left:0;width:auto;height:86vh;border-left:none;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.18)}}
+@media (max-width:720px){.drawer{top:auto;left:0;width:auto;height:86vh;height:86dvh;border-left:none;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.18)}}
 @media (min-width:1180px){body.rv-open .wrap{margin-right:490px}}
 .rvhead{display:flex;align-items:center;gap:8px}
 .rvhead strong{font:700 15px var(--mono)}
@@ -140,6 +141,25 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
 .toast.on{opacity:1}
 .confirm{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
 kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+/* 手機：控制列精簡、輸入框 16px 避免 iOS 自動放大 */
+@media (max-width:600px){
+  header{padding-block:10px 6px}
+  h1 small{display:none}
+  .bar{padding-block:6px}
+  .ctrl{flex-wrap:nowrap;gap:8px}
+  #recBtn{width:46px;height:46px;font-size:12px;white-space:nowrap;padding:0}
+  .timer{font-size:15px;min-width:0}
+  #cutBtn{padding:6px 8px;font-size:13px;white-space:nowrap}
+  .tabs{margin-top:6px}
+  .tabs button{padding:6px 10px}
+  .sess select{min-width:0;flex-basis:100%}
+  .sess button,.sess .btn{padding:4px 10px;font-size:13px}
+  input[type=text],input[type=password],input[type=number],select,textarea{font-size:16px}
+  .seg{padding-inline:4px 0;gap:4px 8px}
+  .seg .n{min-width:34px}
+  .rvhead{position:sticky;top:calc(-12px - env(safe-area-inset-top,0px));background:var(--panel);z-index:1;padding-block:4px}
+  .kbdhint{display:none}
+}
 </style>
 </head>
 <body>
@@ -246,6 +266,16 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
   <p class="note" style="margin:0">音檔與文字都存在這台裝置的瀏覽器裡，不會上傳到其他地方。Safari 會清除 7 天沒開啟的網站資料，建議把本頁「加入主畫面」，並定期匯出 ZIP。ZIP 內含每段原始音檔、逐段校對、合併稿與整理稿，可在其他裝置匯入繼續編輯。</p>
 </section>
 
+<div class="sess">
+  <select id="sessSel" aria-label="選擇工作階段"></select>
+  <button id="newSess" type="button">新工作階段</button>
+  <button id="renSess" type="button">改名</button>
+  <span id="delWrap"><button id="delSess" class="danger" type="button">刪除</button></span>
+  <button id="pauseBtn" type="button">暫停處理</button>
+  <label class="btn"><input id="file" type="file" accept="audio/*,video/*" multiple hidden>上傳音檔</label>
+</div>
+<div class="stats" id="stats"></div>
+
 <div class="bar">
   <div class="ctrl">
     <button id="recBtn" type="button" aria-label="開始錄音">錄音</button>
@@ -255,17 +285,8 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
       <div class="segprog"><i id="segp"></i></div>
     </div>
     <button id="cutBtn" type="button" disabled>立即切段</button>
-    <button id="pauseBtn" type="button">暫停處理</button>
-    <label class="btn"><input id="file" type="file" accept="audio/*,video/*" multiple hidden>上傳音檔</label>
   </div>
   <div id="banner" class="banner" hidden></div>
-  <div class="stats" id="stats"></div>
-  <div class="sess">
-    <select id="sessSel" aria-label="選擇工作階段"></select>
-    <button id="newSess" type="button">新工作階段</button>
-    <button id="renSess" type="button">改名</button>
-    <span id="delWrap"><button id="delSess" class="danger" type="button">刪除</button></span>
-  </div>
   <div class="tabs" role="tablist">
     <button data-tab="segs" class="on" type="button">逐段審閱</button>
     <button data-tab="merged" type="button">合併稿</button>
@@ -354,7 +375,7 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
     <div id="rvDropped"></div>
     <div id="rvHist"></div>
   </details>
-  <p class="note" style="margin:0"><kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> 確認並下一段 · <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd> 播放／暫停 · <kbd>Esc</kbd> 關閉</p>
+  <p class="note kbdhint" style="margin:0"><kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> 確認並下一段 · <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd> 播放／暫停 · <kbd>Esc</kbd> 關閉</p>
 </aside>
 <div class="toast" id="toast" role="status"></div>
 
