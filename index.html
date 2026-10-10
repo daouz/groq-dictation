@@ -3,46 +3,58 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f7a5a">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Groq 連續聽寫</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* 版面：頂部控制列固定，下方為分頁（逐段／合併稿／整理稿），設定收在可展開面板 */
+/* 版面：頂部固定控制列；逐段／合併稿／整理稿三個分頁；審閱面板在右側（手機為底部抽屜） */
 :root{
   --bg:#f3f5f4; --panel:#ffffff; --fg:#17201c; --muted:#5d6b64; --line:#d9e0dc;
-  --accent:#0f7a5a; --accent-fg:#ffffff; --rec:#d23b3b; --warn:#b7791f; --err:#c0392b; --soft:#e7efeb;
+  --accent:#0f7a5a; --accent-fg:#ffffff; --rec:#d23b3b; --warn:#a86b12; --err:#c0392b; --soft:#e7efeb;
+  --hl-h:#f8d3cd; --hl-s:#f7e3ad; --hl-t:#d3e3f8; --banner:#fff4dc;
   --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#111614; --panel:#1a211e; --fg:#e4ebe7; --muted:#93a39b; --line:#2c3632;
-  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a; color-scheme:dark}}
+  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a;
+  --hl-h:#5b2620; --hl-s:#4d3b12; --hl-t:#1d3452; --banner:#3a2f14; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111614; --panel:#1a211e; --fg:#e4ebe7; --muted:#93a39b; --line:#2c3632;
-  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a; color-scheme:dark}
+  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a;
+  --hl-h:#5b2620; --hl-s:#4d3b12; --hl-t:#1d3452; --banner:#3a2f14; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--bg);color:var(--fg);font:15px/1.7 var(--font);padding-inline:16px;padding-block:0 60px}
-.wrap{max-width:880px;margin:0 auto}
+body{background:var(--bg);color:var(--fg);font:15px/1.7 var(--font);padding-inline:16px;padding-block:0 80px}
+.wrap{max-width:900px;margin:0 auto}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-block:14px 8px}
 h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.02em}
 h1 small{font:500 12px var(--mono);color:var(--muted);margin-left:6px}
+h2.sub{font-size:15px;margin:6px 0 0}
 .sp{flex:1}
 button,select,input,textarea{font:inherit;color:inherit}
-button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer}
-button:hover{border-color:var(--accent)}
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[contenteditable]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button,.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;display:inline-block;line-height:1.5}
+button:hover,.btn:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.txt:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 button.danger{color:var(--err)}
 button:disabled{opacity:.45;cursor:default}
-input[type=text],input[type=password],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:100%}
-textarea{resize:vertical;min-height:60px}
+input[type=text],input[type=password],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:60px;line-height:1.75}
 label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.pair{display:flex;gap:6px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
 #settings{display:grid;gap:12px;margin-bottom:12px}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.checks{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px}
 .note{font-size:12px;color:var(--muted)}
+.err{color:var(--err)}
 .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px}
 .ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 #recBtn{width:56px;height:56px;border-radius:50%;border:none;background:var(--rec);color:#fff;font-weight:700;font-size:13px;flex:none}
@@ -50,52 +62,92 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 55%,transparent)}50%{box-shadow:0 0 0 10px transparent}}
 @media (prefers-reduced-motion:reduce){#recBtn.on{animation:none}}
 .timer{font:600 20px var(--mono);font-variant-numeric:tabular-nums;min-width:86px}
-.meter{flex:1;min-width:120px;height:10px;background:var(--soft);border-radius:6px;position:relative;overflow:hidden}
+.meter{height:10px;background:var(--soft);border-radius:6px;position:relative;overflow:hidden}
 .meter i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0;transition:width .06s}
 .meter b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn)}
 .segprog{height:3px;background:var(--soft);border-radius:2px;margin-top:6px;overflow:hidden}
 .segprog i{display:block;height:100%;width:0;background:var(--muted)}
+.banner{background:var(--banner);border:1px solid var(--warn);border-radius:8px;padding:6px 10px;font-size:13px;margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .stats{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:12px}
 .chip{font:500 12px var(--mono);padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-.chip.q{color:var(--muted)} .chip.t{color:var(--warn);border-color:var(--warn)} .chip.d{color:var(--accent);border-color:var(--accent)} .chip.e{color:var(--err);border-color:var(--err)}
+.chip.t,.chip.w{color:var(--warn);border-color:var(--warn)} .chip.d{color:var(--accent);border-color:var(--accent)} .chip.e{color:var(--err);border-color:var(--err)}
+button.chip{cursor:pointer;background:none}
 .sess{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
-.sess select{width:auto;min-width:180px;flex:1}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:10px}
-.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted)}
+.sess select,.sess input{width:auto;min-width:160px;flex:1}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:10px;overflow-x:auto}
+.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted);white-space:nowrap}
 .tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:700}
 .pane{padding-top:12px}
-.seg{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.row.tight{gap:6px;margin:0}
+.row.tight button,.row.tight .btn{padding:2px 10px;font-size:13px}
+.fchips{display:flex;flex-wrap:wrap;gap:6px}
+.fchips button{border-radius:999px;padding:2px 12px;font-size:13px}
+.fchips button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+details.fr{margin-bottom:10px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+.frbox{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;align-items:center}
+@media (max-width:560px){.frbox{grid-template-columns:1fr}}
+.seg{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 8px 12px 10px;border-bottom:1px solid var(--line)}
+.seg.need{box-shadow:inset 3px 0 0 var(--err)}
+.seg.cur{background:var(--soft)}
 .seg .n{font:600 12px var(--mono);color:var(--muted);text-align:right;min-width:44px;font-variant-numeric:tabular-nums}
 .seg .n span{display:block;font-weight:400}
 .seg .body{min-width:0}
-.seg .txt{white-space:pre-wrap;word-break:break-word;border-radius:6px;padding:2px 4px;margin:-2px -4px}
-.seg .txt[contenteditable="true"]:hover{background:var(--soft)}
-.seg .raw{font-size:13px;color:var(--muted);white-space:pre-wrap;margin-top:4px;border-left:2px solid var(--line);padding-left:8px}
-.seg .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
+.seg .txt{white-space:pre-wrap;word-break:break-word;cursor:pointer;border-radius:6px}
+.seg .txt:hover{background:var(--soft)}
+.seg .ph{color:var(--muted);font-style:italic}
+.seg.skip .txt{color:var(--muted);font-size:13px}
+.seg .meta,.rvchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
 .seg .meta button{padding:1px 8px;font-size:12px}
-.seg.skip .txt{color:var(--muted);font-style:italic}
+mark{color:inherit;border-radius:3px;padding:0 1px}
+mark.hl-h{background:var(--hl-h)} mark.hl-s{background:var(--hl-s)} mark.hl-t{background:var(--hl-t)}
 .empty{color:var(--muted);text-align:center;padding:40px 10px}
-.doc{white-space:pre-wrap;word-break:break-word;line-height:1.9}
+.doc{word-break:break-word;line-height:1.95;max-width:70ch}
 .doc p{margin:0 0 1em}
-.md h1{font-size:22px;margin:.2em 0 .6em}
+.ms{cursor:pointer;border-radius:3px}
+.ms:hover{background:var(--soft)}
+.ms.flag{text-decoration:underline wavy var(--err);text-underline-offset:4px}
+.md{line-height:1.85;max-width:70ch;word-break:break-word}
+.md h1{font-size:22px;margin:.2em 0 .6em;text-wrap:balance}
 .md h2{font-size:18px;margin:1.4em 0 .5em;padding-bottom:4px;border-bottom:1px solid var(--line)}
 .md h3{font-size:16px;margin:1.2em 0 .4em}
 .md ul,.md ol{padding-left:1.4em;margin:.4em 0 1em}
 .md p{margin:0 0 .9em}
-.md{line-height:1.85;max-width:68ch}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
-.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.md mark{background:var(--hl-s)}
+a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding:0 4px;border:1px solid var(--line);border-radius:4px;white-space:nowrap}
+.items{margin-bottom:14px;display:grid;gap:4px}
+.items .item{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.items .q{font-weight:500}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(470px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:30;overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;align-content:start;box-shadow:-8px 0 24px rgba(0,0,0,.14)}
+@media (max-width:720px){.drawer{top:auto;left:0;width:auto;height:86vh;border-left:none;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.18)}}
+@media (min-width:1180px){body.rv-open .wrap{margin-right:490px}}
+.rvhead{display:flex;align-items:center;gap:8px}
+.rvhead strong{font:700 15px var(--mono)}
+#rvAudio{width:100%}
+.rate button.on{border-color:var(--accent);color:var(--accent)}
+.iss{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:6px;font-size:14px}
+.iss.hl-h{background:color-mix(in srgb,var(--hl-h) 55%,transparent)}
+.iss.hl-s{background:color-mix(in srgb,var(--hl-s) 55%,transparent)}
+.iss.hl-t{background:color-mix(in srgb,var(--hl-t) 55%,transparent)}
+.iss.done{opacity:.55}
+.alt{border-top:1px solid var(--line);padding:8px 0;display:grid;gap:4px}
+.alt .rawtxt{font-size:13px;white-space:pre-wrap;color:var(--muted);word-break:break-word}
+.hist{font-size:13px;display:flex;gap:8px;align-items:baseline;border-top:1px solid var(--line);padding:6px 0}
+.hist span.t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:50}
 .toast.on{opacity:1}
-.confirm{display:inline-flex;gap:6px;align-items:center;font-size:13px}
+.confirm{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <header>
-  <h1>Groq 連續聽寫<small>whisper turbo → gpt-oss</small></h1>
+  <h1>Groq 連續聽寫<small>whisper → gpt-oss</small></h1>
   <span class="sp"></span>
-  <button id="setBtn" type="button">設定</button>
+  <button id="setBtn" type="button">設定與保存</button>
 </header>
 
 <section id="settings" class="card" hidden>
@@ -103,13 +155,38 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
     <input id="key" type="password" placeholder="gsk_..." autocomplete="off">
   </label>
   <div class="grid2">
-    <label class="f">修正模型
-      <select id="fixModel">
-        <option value="openai/gpt-oss-120b">gpt-oss-120b（較準）</option>
-        <option value="openai/gpt-oss-20b">gpt-oss-20b（較快）</option>
+    <label class="f">轉錄模型
+      <select id="asr">
+        <option value="whisper-large-v3-turbo">large-v3-turbo（快、便宜）</option>
+        <option value="whisper-large-v3">large-v3（較準、較慢）</option>
       </select>
     </label>
-    <label class="f">整理模型
+    <label class="f">可疑段落處理
+      <select id="escalate">
+        <option value="v3">自動換另一個模型重辨識並比對</option>
+        <option value="all">每段都用兩個模型比對（用量加倍）</option>
+        <option value="off">只標示，不重辨識</option>
+      </select>
+    </label>
+    <label class="f">語言
+      <select id="lang">
+        <option value="zh">中文</option>
+        <option value="">自動偵測（中英混雜時）</option>
+      </select>
+    </label>
+    <label class="f">Groq 方案（決定速度與每次送出的量）
+      <select id="tier">
+        <option value="free">免費方案</option>
+        <option value="dev">開發者方案（付費）</option>
+      </select>
+    </label>
+    <label class="f">修正模型（逐段校對）
+      <select id="fixModel">
+        <option value="openai/gpt-oss-120b">gpt-oss-120b（較準）</option>
+        <option value="openai/gpt-oss-20b">gpt-oss-20b（較快，額度另計）</option>
+      </select>
+    </label>
+    <label class="f">整理模型（整理全文）
       <select id="orgModel">
         <option value="openai/gpt-oss-120b">gpt-oss-120b</option>
         <option value="openai/gpt-oss-20b">gpt-oss-20b</option>
@@ -118,27 +195,42 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
     <label class="f">分段方式
       <select id="mode">
         <option value="auto">停頓自動切段</option>
-        <option value="fixed">固定秒數</option>
+        <option value="fixed">固定長度</option>
       </select>
     </label>
     <label class="f">最短／最長秒數
-      <span style="display:flex;gap:6px"><input id="minSec" type="number" min="3" max="60" value="8"><input id="maxSec" type="number" min="10" max="300" value="40"></span>
+      <span class="pair"><input id="minSec" type="number" min="3" max="60" value="8" aria-label="最短秒數"><input id="maxSec" type="number" min="10" max="120" value="40" aria-label="最長秒數"></span>
     </label>
-    <label class="f">靜音門檻（黃線）<input id="thr" type="range" min="0.002" max="0.08" step="0.001" value="0.015"></label>
-    <label class="f">同時轉錄／修正數
-      <span style="display:flex;gap:6px"><input id="ctx" type="number" min="1" max="6" value="3"><input id="cfx" type="number" min="1" max="6" value="2"></span>
+    <label class="f">靜音門檻（音量條上的黃線）<input id="thr" type="range" min="0.002" max="0.08" step="0.001" value="0.015"></label>
+    <label class="f">錄音位元率（Opus 單聲道）
+      <select id="kbps">
+        <option value="16">16 kbps（約 7 MB／小時）</option>
+        <option value="24">24 kbps（約 11 MB／小時）</option>
+        <option value="32">32 kbps（約 15 MB／小時）</option>
+      </select>
     </label>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="agc"> 麥克風自動增益（安靜環境建議關閉，可減少幻聽）</label>
+    <label><input type="checkbox" id="autoplay"> 開啟審閱時自動播放該段</label>
   </div>
   <label class="f">專有名詞／詞彙表（逗號或換行分隔，會提示給轉錄與修正）
     <textarea id="vocab" placeholder="例：Groq、價格行為、停損、斐波那契"></textarea>
   </label>
   <div class="row" style="margin:0">
-    <button id="saveSet" class="primary" type="button">儲存設定</button>
     <button id="testKey" type="button">測試金鑰</button>
-    <button id="clearAudio" type="button">刪除已完成段落的音檔</button>
-    <span id="setMsg" class="note"></span>
+    <span id="setMsg" class="note">變更會自動儲存</span>
   </div>
-  <p class="note" style="margin:0">錄音期間請保持此分頁在前景、螢幕不要關閉（手機鎖屏會中斷麥克風）。音檔與文字存在瀏覽器 IndexedDB，重新整理後未完成的工作會自動接續。</p>
+
+  <h2 class="sub">音檔保存</h2>
+  <p id="stInfo" class="note" style="margin:0">讀取儲存空間中…</p>
+  <div class="row" style="margin:0">
+    <button id="persistBtn" type="button">要求永久保存</button>
+    <button id="zipOut" type="button">匯出本工作階段 ZIP</button>
+    <label class="btn"><input id="zipIn" type="file" accept=".zip,application/zip" hidden>匯入 ZIP</label>
+    <span id="delAudioWrap"><button id="delAudio" class="danger" type="button">刪除已確認段落的音檔</button></span>
+  </div>
+  <p class="note" style="margin:0">音檔與文字都存在這台裝置的瀏覽器裡，不會上傳到其他地方。Safari 會清除 7 天沒開啟的網站資料，建議把本頁「加入主畫面」，並定期匯出 ZIP。ZIP 內含每段原始音檔、逐段校對、合併稿與整理稿，可在其他裝置匯入繼續編輯。</p>
 </section>
 
 <div class="bar">
@@ -150,8 +242,10 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
       <div class="segprog"><i id="segp"></i></div>
     </div>
     <button id="cutBtn" type="button" disabled>立即切段</button>
-    <label class="note" style="cursor:pointer"><input id="file" type="file" accept="audio/*,video/*" multiple hidden><u>上傳音檔</u></label>
+    <button id="pauseBtn" type="button">暫停處理</button>
+    <label class="btn"><input id="file" type="file" accept="audio/*,video/*" multiple hidden>上傳音檔</label>
   </div>
+  <div id="banner" class="banner" hidden></div>
   <div class="stats" id="stats"></div>
   <div class="sess">
     <select id="sessSel" aria-label="選擇工作階段"></select>
@@ -160,85 +254,207 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
     <span id="delWrap"><button id="delSess" class="danger" type="button">刪除</button></span>
   </div>
   <div class="tabs" role="tablist">
-    <button data-tab="segs" class="on" type="button">逐段</button>
+    <button data-tab="segs" class="on" type="button">逐段審閱</button>
     <button data-tab="merged" type="button">合併稿</button>
     <button data-tab="org" type="button">整理稿</button>
   </div>
 </div>
 
-<section id="p-segs" class="pane"></section>
+<section id="p-segs" class="pane">
+  <div class="row">
+    <div class="fchips" id="filters"></div>
+    <span class="sp"></span>
+    <button id="reviewBtn" class="primary" type="button">審閱待確認</button>
+  </div>
+  <details class="fr">
+    <summary>全文尋找與取代（常見錯字一次修正）</summary>
+    <div class="frbox">
+      <input id="frFind" type="text" placeholder="尋找，例如：停順">
+      <input id="frRep" type="text" placeholder="取代為，例如：停損">
+      <button id="frGo" type="button">全部取代</button>
+    </div>
+    <div class="row tight" style="margin-top:6px"><label class="note"><input type="checkbox" id="frVocab" checked> 取代後的詞加入詞彙表</label><span id="frCount" class="note"></span></div>
+  </details>
+  <div id="segList"></div>
+</section>
+
 <section id="p-merged" class="pane" hidden>
   <div class="row">
     <button id="copyMerged" type="button">複製</button>
     <button id="dlMerged" type="button">下載 .txt</button>
-    <span class="note">已完成段落依順序接成段落；修改請在「逐段」直接點文字編輯。</span>
+    <label class="note"><input type="checkbox" id="mFlag" checked> 標示待確認的段落</label>
+    <span class="note">點任一句可開啟該段審閱。</span>
   </div>
   <div id="mergedDoc" class="doc"></div>
 </section>
+
 <section id="p-org" class="pane" hidden>
   <div class="row">
     <button id="orgBtn" class="primary" type="button">整理全文</button>
     <button id="copyOrg" type="button">複製 Markdown</button>
     <button id="dlOrg" type="button">下載 .md</button>
-    <button id="dlJson" type="button">備份 JSON</button>
+    <button id="zipOut2" type="button">匯出 ZIP（含音檔）</button>
     <span id="orgMsg" class="note"></span>
   </div>
+  <div id="orgItems"></div>
   <div id="orgDoc" class="md"></div>
 </section>
 </div>
-<div class="toast" id="toast"></div>
+
+<aside id="rv" class="drawer" hidden aria-label="段落審閱">
+  <div class="rvhead">
+    <strong id="rvTitle"></strong><span id="rvPos" class="note"></span>
+    <span class="sp"></span>
+    <button id="rvClose" type="button">關閉</button>
+  </div>
+  <div id="rvChips" class="rvchips"></div>
+  <div>
+    <audio id="rvAudio" controls preload="auto"></audio>
+    <div class="row tight rate" id="rvRate">
+      <span class="note">速度</span>
+      <button type="button" data-rate="0.75">0.75×</button>
+      <button type="button" data-rate="1" class="on">1×</button>
+      <button type="button" data-rate="1.25">1.25×</button>
+      <button type="button" data-rate="1.5">1.5×</button>
+      <label class="note"><input type="checkbox" id="rvLoop"> 循環</label>
+    </div>
+    <p id="rvNoAudio" class="note" hidden>這段沒有保存音檔。</p>
+  </div>
+  <label class="f">校正後文字（直接修改，自動存檔）
+    <textarea id="rvText" rows="6"></textarea>
+  </label>
+  <div id="rvIssues" style="display:grid;gap:8px"></div>
+  <div class="row" style="margin:0">
+    <button id="rvOk" class="primary" type="button">確認，下一段</button>
+    <button id="rvPrev" type="button">上一段</button>
+    <button id="rvNext" type="button">下一段</button>
+  </div>
+  <div class="row" style="margin:0">
+    <button id="rvRefix" type="button">重新修正</button>
+    <button id="rvV3" type="button">用 large-v3 重辨識</button>
+    <button id="rvTurbo" type="button">用 turbo 重辨識</button>
+    <button id="rvSkip" type="button">從逐字稿移除</button>
+  </div>
+  <details id="rvMore" open>
+    <summary>原始辨識、濾除內容與修改紀錄</summary>
+    <div id="rvAlts"></div>
+    <div id="rvDropped"></div>
+    <div id="rvHist"></div>
+  </details>
+  <p class="note" style="margin:0"><kbd>Ctrl/⌘</kbd>+<kbd>Enter</kbd> 確認並下一段 · <kbd>Ctrl/⌘</kbd>+<kbd>K</kbd> 播放／暫停 · <kbd>Esc</kbd> 關閉</p>
+</aside>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
 "use strict";
-/* ---------- 小工具 ---------- */
+/* ================= 基本工具 ================= */
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fmtT = s => { s = Math.max(0, Math.floor(s)); return [s/3600|0, (s%3600)/60|0, s%60].map(v => String(v).padStart(2,"0")).join(":"); };
 const clock = ts => new Date(ts).toLocaleTimeString("zh-TW", {hour12:false});
-function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("on"),2200); }
-const LS = { get(k,d){ try{ const v=localStorage.getItem("gd_"+k); return v==null?d:JSON.parse(v);}catch{return d} }, set(k,v){ try{localStorage.setItem("gd_"+k,JSON.stringify(v))}catch{} } };
+const MB = n => (n/1048576).toFixed(1) + " MB";
+const fmtWait = ms => ms >= 3600000 ? Math.ceil(ms/3600000)+" 小時" : ms >= 60000 ? Math.ceil(ms/60000)+" 分鐘" : Math.ceil(ms/1000)+" 秒";
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("on"),2600); }
+const LS = { get(k,d){ try{ const v=localStorage.getItem("gd_"+k); return v==null?d:JSON.parse(v); }catch{ return d; } }, set(k,v){ try{ localStorage.setItem("gd_"+k, JSON.stringify(v)); }catch{} } };
+const V3 = "whisper-large-v3", TURBO = "whisper-large-v3-turbo";
+const MNAME = m => m===V3 ? "large-v3" : m===TURBO ? "turbo" : String(m||"");
+const GROQ_OK = ["mp3","mp4","mpeg","mpga","m4a","wav","webm"];
+const extOf = type => { type = String(type||""); return /mp4|m4a|aac/.test(type) ? "m4a" : /ogg/.test(type) ? "ogg" : /wav/.test(type) ? "wav" : /mpeg|mp3/.test(type) ? "mp3" : /webm/.test(type) ? "webm" : ""; };
+const mimeOf = name => ({webm:"audio/webm",m4a:"audio/mp4",mp4:"audio/mp4",ogg:"audio/ogg",wav:"audio/wav",mp3:"audio/mpeg",flac:"audio/flac"})[String(name).split(".").pop().toLowerCase()] || "application/octet-stream";
 
-/* ---------- 設定 ---------- */
-const S = Object.assign({key:"", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b", mode:"auto", minSec:8, maxSec:40, thr:0.015, ctx:3, cfx:2, vocab:""}, LS.get("settings", {}));
-const fields = ["key","fixModel","orgModel","mode","minSec","maxSec","thr","ctx","cfx","vocab"];
-function loadForm(){ fields.forEach(f => $("#"+f).value = S[f]); markThr(); }
+/* ================= 設定 ================= */
+const DEF = {key:"", asr:TURBO, escalate:"v3", lang:"zh", tier:"free", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b",
+  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:""};
+const S = Object.assign({}, DEF, LS.get("settings", {}));
+if (typeof S.escalate === "boolean") S.escalate = S.escalate ? "v3" : "off";
+const NUM = ["minSec","maxSec","thr","kbps"];
+const FIELDS = Object.keys(DEF);
+// 免費方案：gpt-oss 每分鐘 8K token、每天 200K；Whisper 每分鐘 20 次。每次請求都控制在上限內。
+const TIER = () => S.tier === "dev"
+  ? {tx:4, fx:3, batch:2500, fixTok:4000, org:9000, orgTok:9000, orgEffort:"medium"}
+  : {tx:2, fx:1, batch:900,  fixTok:2500, org:1800, orgTok:3200, orgEffort:"low"};
+function loadForm(){ for (const f of FIELDS){ const el=$("#"+f); if(!el) continue; if(el.type==="checkbox") el.checked=!!S[f]; else el.value=S[f]; } markThr(); }
 function readForm(){
-  fields.forEach(f => { const el=$("#"+f); S[f] = el.type==="number"||el.type==="range" ? Number(el.value) : el.value.trim(); });
-  S.minSec = Math.max(3, S.minSec); S.maxSec = Math.max(S.minSec+2, S.maxSec);
+  for (const f of FIELDS){ const el=$("#"+f); if(!el) continue; S[f] = el.type==="checkbox" ? el.checked : NUM.includes(f) ? Number(el.value) : el.value.trim(); }
+  S.minSec = Math.min(60, Math.max(3, S.minSec||8)); S.maxSec = Math.min(120, Math.max(S.minSec+2, S.maxSec||40));
   LS.set("settings", S);
 }
 function markThr(){ $("#thrMark").style.left = Math.min(100, Math.sqrt(Number($("#thr").value)/0.25)*100) + "%"; }
 $("#thr").addEventListener("input", markThr);
-$("#setBtn").onclick = () => { $("#settings").hidden = !$("#settings").hidden; };
-$("#saveSet").onclick = () => { readForm(); $("#setMsg").textContent = "已儲存"; pump(); };
+$("#settings").addEventListener("change", () => { readForm(); $("#setMsg").textContent = "已自動儲存"; renderStats(); pump(); });
+$("#setBtn").onclick = () => { $("#settings").hidden = !$("#settings").hidden; if(!$("#settings").hidden) storageInfo(); };
 $("#testKey").onclick = async () => {
   readForm(); $("#setMsg").textContent = "測試中…";
   try { const r = await fetch("https://api.groq.com/openai/v1/models", {headers:{Authorization:"Bearer "+S.key}});
     $("#setMsg").textContent = r.ok ? "金鑰可用" : "金鑰無效（HTTP "+r.status+"）";
+    if (r.ok && paused && pausedReason==="key") setPaused(false);
   } catch(e){ $("#setMsg").textContent = "連線失敗：" + e.message; }
 };
+const vocabList = () => S.vocab.split(/[,，、\n]/).map(s=>s.trim()).filter(Boolean);
 loadForm();
 if (!S.key) $("#settings").hidden = false;
 
-/* ---------- IndexedDB ---------- */
+/* ================= 提示橫幅 ================= */
+const banners = {};
+function banner(kind, msg){ if ((banners[kind]||"") === (msg||"")) return; if (msg) banners[kind]=msg; else delete banners[kind]; drawBanner(); }
+function drawBanner(){
+  const b=$("#banner"); const ks=Object.keys(banners);
+  b.hidden = !ks.length;
+  b.innerHTML = ks.map(k => `<span>${esc(banners[k])}</span>`).join("") + (paused ? '<button type="button" id="resumeBtn">繼續處理</button>' : "");
+  const rb=$("#resumeBtn"); if(rb) rb.onclick = () => setPaused(false);
+}
+
+/* ================= IndexedDB ================= */
 let db;
-function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",1);
-  r.onupgradeneeded=()=>{ const d=r.result; d.createObjectStore("sessions",{keyPath:"id"}); const s=d.createObjectStore("segs",{keyPath:"id"}); s.createIndex("sid","sid"); };
-  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-function tx(store, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(store,mode); const out=fn(t.objectStore(store)); t.oncomplete=()=>res(out&&out.result!==undefined?out.result:out); t.onerror=()=>rej(t.error); }); }
-const put = (store,v) => tx(store,"readwrite",s=>s.put(v));
-const getAll = store => tx(store,"readonly",s=>s.getAll());
-const segsOf = sid => tx("segs","readonly",s=>s.index("sid").getAll(sid));
-const delKey = (store,k) => tx(store,"readwrite",s=>s.delete(k));
+function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",2);
+  r.onupgradeneeded=()=>{ const d=r.result;
+    if(!d.objectStoreNames.contains("sessions")) d.createObjectStore("sessions",{keyPath:"id"});
+    if(!d.objectStoreNames.contains("segs")) d.createObjectStore("segs",{keyPath:"id"}).createIndex("sid","sid");
+    if(!d.objectStoreNames.contains("sources")) d.createObjectStore("sources",{keyPath:"id"}).createIndex("sid","sid"); };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>toast("請關閉其他開著本工具的分頁後重新整理"); }); }
+function req(store, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(store,mode); const q=fn(t.objectStore(store));
+  t.oncomplete=()=>res(q ? q.result : undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error || new Error("儲存被中止")); }); }
+const put = (s,v) => req(s,"readwrite",o=>o.put(v));
+const getAll = s => req(s,"readonly",o=>o.getAll());
+const getOne = (s,k) => req(s,"readonly",o=>o.get(k));
+const bySid = (s,sid) => req(s,"readonly",o=>o.index("sid").getAll(sid));
+const delKey = (s,k) => req(s,"readwrite",o=>o.delete(k));
 
-/* ---------- 狀態 ---------- */
-let sessions = [], cur = null;          // 目前工作階段
-const segs = new Map();                 // id -> seg（只放目前工作階段）
-let saveTimers = {};
-function saveSeg(seg, now){ clearTimeout(saveTimers[seg.id]); const go=()=>put("segs",seg).catch(e=>console.error(e)); if(now) return go(); saveTimers[seg.id]=setTimeout(go,300); }
+/* ================= 狀態 ================= */
+let sessions=[], cur=null, filter="all", paused=false, pausedReason="";
+const segs = new Map();
+const saveTimers = {};
+function normalize(g){
+  return Object.assign({blob:null, ext:"webm", srcId:null, start:null, end:null, dur:0, voiced:null, raw:"", text:"", model:"", lp:null,
+    asrRisk:0, risk:0, flags:[], dropped:[], lowParts:[], alts:[], issues:[], history:[], edited:false, reviewed:false, userSkip:false,
+    orgNote:"", tries:0, nextAt:0, err:"", forceModel:null, prefer:null, solo:false, agree:null, _v:0}, g);
+}
+const touch = g => { g._v = (g._v||0) + 1; };
+function saveSeg(g, now){
+  clearTimeout(saveTimers[g.id]);
+  const go = () => put("segs", g).then(()=>banner("quota")).catch(e => {
+    if (e && e.name === "QuotaExceededError") banner("quota", "儲存空間已滿：請匯出 ZIP 後刪除舊的工作階段或音檔。");
+    else console.error(e);
+  });
+  if (now) return go();
+  saveTimers[g.id] = setTimeout(go, 400);
+}
 const sorted = () => [...segs.values()].sort((a,b)=>a.seq-b.seq);
+const segBySeq = seq => { for (const g of segs.values()) if (g.seq===seq) return g; return null; };
+const openIssues = g => (g.issues||[]).filter(i => !i.state);
+const ISS_W = {"疑似幻聽":2, "語意不通":1, "疑似錯字":1, "數字或名詞存疑":1};
+function computeRisk(g){ g.risk = (g.asrRisk||0) + openIssues(g).reduce((s,i)=>s+(ISS_W[i.type]||1),0); }
+function needsReview(g){
+  if (g.reviewed) return false;
+  if (g.status==="err_tx" || g.status==="err_fx") return true;
+  if (g.status!=="done") return false;
+  return g.risk>=2 || openIssues(g).length>0 || !!g.orgNote;
+}
+const hasAudio = g => !!(g.blob || g.srcId);
 
+/* ================= 工作階段 ================= */
 async function loadSessions(){
   sessions = (await getAll("sessions")).sort((a,b)=>b.created-a.created);
   if (!sessions.length) await newSession();
@@ -247,381 +463,1006 @@ async function loadSessions(){
 }
 async function newSession(){
   const d = new Date();
-  const s = {id:"s"+Date.now(), name:d.toLocaleDateString("zh-TW")+" "+d.toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit"}), created:Date.now(), organized:""};
+  const s = {id:"s"+Date.now(), name:d.toLocaleDateString("zh-TW")+" "+d.toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit"}), created:Date.now(), organized:"", orgItems:[]};
   await put("sessions", s); sessions.unshift(s); return s;
 }
 async function switchSession(id){
   if (rec.on) { toast("錄音中無法切換工作階段"); renderSessSel(); return; }
+  closeReview();
   cur = sessions.find(s=>s.id===id); LS.set("cur", id);
-  segs.clear(); (await segsOf(id)).forEach(g => { if (g.status==="transcribing") g.status="queued"; if (g.status==="fixing") g.status="transcribed"; g.nextAt=0; segs.set(g.id,g); });
-  renderSessSel(); render(true); $("#orgDoc").innerHTML = cur.organized ? md(cur.organized) : '<p class="empty">按「整理全文」把已完成的段落整理成有標題、摘要與分節的筆記。</p>';
-  pump();
+  segs.clear();
+  for (const raw of await bySid("segs", id)) {
+    const g = normalize(raw);
+    if (g.status==="transcribing") g.status="queued";
+    if (g.status==="fixing") g.status="transcribed";
+    g.nextAt = 0; computeRisk(g); segs.set(g.id, g);
+  }
+  renderSessSel(); $("#segList").innerHTML=""; render(); drawOrg(); pump();
 }
-function renderSessSel(){ $("#sessSel").innerHTML = sessions.map(s=>`<option value="${s.id}" ${cur&&s.id===cur.id?"selected":""}>${esc(s.name)}</option>`).join(""); }
+function renderSessSel(){ $("#sessSel").innerHTML = sessions.map(s=>`<option value="${esc(s.id)}" ${cur&&s.id===cur.id?"selected":""}>${esc(s.name)}</option>`).join(""); }
 $("#sessSel").onchange = e => switchSession(e.target.value);
-$("#newSess").onclick = async () => { if(rec.on) return toast("請先停止錄音"); const s = await newSession(); await switchSession(s.id); };
+$("#newSess").onclick = async () => { if (rec.on) return toast("請先停止錄音"); const s = await newSession(); await switchSession(s.id); };
 $("#renSess").onclick = () => {
-  const sel=$("#sessSel"); const inp=document.createElement("input"); inp.type="text"; inp.id="renInput"; inp.value=cur.name; inp.style.flex="1";
-  sel.replaceWith(inp); inp.focus(); inp.select();
-  const done = async () => { cur.name = inp.value.trim()||cur.name; await put("sessions",cur); inp.replaceWith(sel); renderSessSel(); };
-  inp.onkeydown = e => { if(e.key==="Enter") done(); if(e.key==="Escape"){ inp.replaceWith(sel); } }; inp.onblur = done;
+  const sel=$("#sessSel"); const inp=document.createElement("input"); inp.type="text"; inp.id="renInput"; inp.value=cur.name;
+  sel.replaceWith(inp); inp.focus(); inp.select(); let done=false;
+  const finish = async save => { if(done) return; done=true; if(save){ cur.name = inp.value.trim()||cur.name; await put("sessions",cur); } inp.replaceWith(sel); renderSessSel(); };
+  inp.onkeydown = e => { if(e.key==="Enter") finish(true); if(e.key==="Escape") finish(false); };
+  inp.onblur = () => finish(true);
 };
 function delHandler(){
   if (rec.on) return toast("請先停止錄音");
-  $("#delWrap").innerHTML = `<span class="confirm">確定刪除「${esc(cur.name)}」？<button class="danger" id="yesDel" type="button">刪除</button><button id="noDel" type="button">取消</button></span>`;
+  $("#delWrap").innerHTML = `<span class="confirm">刪除「${esc(cur.name)}」和所有音檔？<button class="danger" id="yesDel" type="button">確定刪除</button><button id="noDel" type="button">取消</button></span>`;
   $("#noDel").onclick = resetDel;
-  $("#yesDel").onclick = async () => { for (const g of await segsOf(cur.id)) await delKey("segs", g.id); await delKey("sessions", cur.id);
-    sessions = sessions.filter(s=>s.id!==cur.id); if(!sessions.length) await newSession(); resetDel(); await switchSession(sessions[0].id); };
+  $("#yesDel").onclick = async () => {
+    for (const g of await bySid("segs",cur.id)) await delKey("segs", g.id);
+    for (const s of await bySid("sources",cur.id)) await delKey("sources", s.id);
+    await delKey("sessions", cur.id);
+    sessions = sessions.filter(s=>s.id!==cur.id); if (!sessions.length) await newSession();
+    resetDel(); await switchSession(sessions[0].id); storageInfo();
+  };
 }
 function resetDel(){ $("#delWrap").innerHTML = '<button id="delSess" class="danger" type="button">刪除</button>'; $("#delSess").onclick = delHandler; }
 $("#delSess").onclick = delHandler;
 
-/* ---------- 新增段落 ---------- */
+/* ================= 新增段落 ================= */
 function nextSeq(){ let m=0; segs.forEach(g=>{ if(g.seq>m) m=g.seq; }); return m+1; }
 async function addSegment(blob, meta){
   const seq = nextSeq();
-  const seg = {id:cur.id+":"+String(seq).padStart(5,"0"), sid:cur.id, seq, at:meta.at||Date.now(), dur:meta.dur||0, offset:meta.offset??null,
-    blob, ext:meta.ext||"webm", status:"queued", raw:"", text:"", edited:false, tries:0, nextAt:0, err:"", src:meta.src||"mic"};
-  if (meta.silent) { seg.status="skip"; seg.text="（靜音，略過）"; seg.blob=null; }
-  segs.set(seg.id, seg); await saveSeg(seg, true); render(); pump();
+  const g = normalize({id:cur.id+":"+String(seq).padStart(5,"0"), sid:cur.id, seq, at:meta.at||Date.now(), dur:meta.dur||0, offset:meta.offset??null,
+    blob:blob||null, ext:meta.ext||"webm", srcId:meta.srcId||null, start:meta.start??null, end:meta.end??null, src:meta.src||"mic",
+    voiced:meta.voiced??null, status:"queued"});
+  if (meta.skip) { g.status="skip"; g.text=meta.skip; }
+  segs.set(g.id, g); await saveSeg(g, true); render(); pump();
 }
 
-/* ---------- 錄音與自動切段 ---------- */
-const rec = {on:false, stream:null, ctx:null, an:null, buf:null, mr:null, chunks:[], segStart:0, lastVoice:0, hadVoice:false, peak:0, t0:0, iv:null, mime:"", ext:"webm", wake:null};
+/* ================= 錄音與自動切段 ================= */
+const rec = {on:false, stream:null, ctx:null, an:null, buf:null, mr:null, segStart:0, lastVoice:0, voiced:0, t0:0, iv:null, mime:"", ext:"webm", wake:null, lastTick:0};
 function pickMime(){
-  for (const [m,e] of [["audio/webm;codecs=opus","webm"],["audio/webm","webm"],["audio/mp4","m4a"],["audio/ogg;codecs=opus","ogg"]])
+  for (const [m,e] of [["audio/webm;codecs=opus","webm"],["audio/webm","webm"],["audio/mp4","m4a"]])
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return [m,e];
   return ["", "webm"];
 }
 function startRecorder(){
-  const opts = rec.mime ? {mimeType:rec.mime, audioBitsPerSecond:32000} : {};
-  const mr = new MediaRecorder(rec.stream, opts); const chunks = [];
-  const meta = {at:Date.now(), offset:(performance.now()-rec.t0)/1000};
+  let mr; const bps = S.kbps*1000;
+  try { mr = new MediaRecorder(rec.stream, rec.mime ? {mimeType:rec.mime, audioBitsPerSecond:bps} : {audioBitsPerSecond:bps}); }
+  catch { mr = new MediaRecorder(rec.stream); }
+  const chunks = []; const meta = {at:Date.now(), offset:(performance.now()-rec.t0)/1000};
   mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
   mr.onstop = () => {
-    meta.dur = mr._dur; meta.ext = rec.ext; meta.silent = mr._silent;
-    const blob = new Blob(chunks, {type: rec.mime || chunks[0]?.type || "audio/webm"});
-    if (blob.size > 1000 || meta.silent) addSegment(blob, meta).catch(e=>toast("存檔失敗："+e.message));
+    const blob = new Blob(chunks, {type: chunks[0]?.type || rec.mime || "audio/webm"});
+    if (blob.size < 200) return;
+    const v = mr._voiced || 0;
+    meta.dur = mr._dur; meta.voiced = v; meta.ext = extOf(blob.type) || rec.ext;
+    if (v < 0.6) meta.skip = v < 0.2 ? "（靜音）" : "（語音太短，已略過。若有內容請按「重做」）";
+    addSegment(blob, meta).catch(e => banner("save", "存檔失敗：" + e.message));
   };
   mr.start(1000);
-  rec.mr = mr; rec.segStart = performance.now(); rec.lastVoice = rec.segStart; rec.hadVoice = false; rec.peak = 0;
+  rec.mr = mr; rec.segStart = performance.now(); rec.lastVoice = rec.segStart; rec.voiced = 0;
 }
 function cut(){
   if (!rec.mr) return;
-  const old = rec.mr; old._dur = (performance.now()-rec.segStart)/1000; old._silent = !rec.hadVoice;
-  if (rec.on) startRecorder(); else rec.mr = null;   // 先接上新的錄音器，再停舊的，避免漏字
+  const old = rec.mr; old._dur = (performance.now()-rec.segStart)/1000; old._voiced = rec.voiced;
+  if (rec.on) startRecorder(); else rec.mr = null;   // 先接上新的錄音器再停舊的，不漏字
   try { old.stop(); } catch {}
 }
 async function startRec(){
   readForm();
   if (!S.key) { $("#settings").hidden=false; return toast("請先輸入 Groq API key"); }
-  try { rec.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true}}); }
+  try { rec.stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:!!S.agc}}); }
   catch(e){ return toast("無法使用麥克風：" + e.message); }
+  try { await navigator.storage?.persist?.(); } catch {}
   [rec.mime, rec.ext] = pickMime();
-  rec.ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  rec.ctx = new AC();
   const src = rec.ctx.createMediaStreamSource(rec.stream); rec.an = rec.ctx.createAnalyser(); rec.an.fftSize = 1024; src.connect(rec.an);
   rec.buf = new Float32Array(rec.an.fftSize);
-  rec.on = true; rec.t0 = performance.now(); startRecorder();
+  rec.stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (rec.on) { stopRec(); banner("mic", "麥克風中斷（可能是裝置拔除或系統打斷），已停止錄音並保存目前內容。"); } });
+  rec.on = true; rec.t0 = performance.now(); rec.lastTick = rec.t0; startRecorder();
   rec.iv = setInterval(tick, 50);
   try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {}
-  $("#recBtn").classList.add("on"); $("#recBtn").textContent="停止"; $("#cutBtn").disabled=false;
+  banner("mic");
+  $("#recBtn").classList.add("on"); $("#recBtn").textContent="停止"; $("#recBtn").setAttribute("aria-label","停止錄音"); $("#cutBtn").disabled=false;
 }
 function stopRec(){
   rec.on = false; clearInterval(rec.iv); cut();
   rec.stream?.getTracks().forEach(t=>t.stop()); rec.ctx?.close().catch(()=>{});
   try { rec.wake?.release(); } catch {}
-  $("#recBtn").classList.remove("on"); $("#recBtn").textContent="錄音"; $("#cutBtn").disabled=true; $("#lvl").style.width="0"; $("#segp").style.width="0";
+  $("#recBtn").classList.remove("on"); $("#recBtn").textContent="錄音"; $("#recBtn").setAttribute("aria-label","開始錄音");
+  $("#cutBtn").disabled=true; $("#lvl").style.width="0"; $("#segp").style.width="0";
 }
 function tick(){
   rec.an.getFloatTimeDomainData(rec.buf);
-  let sum=0; for (let i=0;i<rec.buf.length;i++) sum+=rec.buf[i]*rec.buf[i];
-  const rms = Math.sqrt(sum/rec.buf.length), now = performance.now();
+  let sum=0; for (let i=0;i<rec.buf.length;i++) sum += rec.buf[i]*rec.buf[i];
+  const rms = Math.sqrt(sum/rec.buf.length), now = performance.now(), dt = now - rec.lastTick; rec.lastTick = now;
   $("#lvl").style.width = Math.min(100, Math.sqrt(rms/0.25)*100) + "%";
-  if (rms > S.thr) { rec.lastVoice = now; rec.hadVoice = true; }
-  if (rms > rec.peak) rec.peak = rms;
+  if (rms > S.thr) { rec.lastVoice = now; rec.voiced += dt/1000; }
   const el = (now-rec.segStart)/1000;
   $("#timer").textContent = fmtT((now-rec.t0)/1000);
   $("#segp").style.width = Math.min(100, el/S.maxSec*100) + "%";
-  const quiet = now - rec.lastVoice;
   if (el >= S.maxSec) return cut();
-  if (S.mode==="auto" && el >= S.minSec && rec.hadVoice && quiet >= 700) return cut();
-  if (S.mode==="fixed" && el >= S.minSec && el >= S.maxSec) return cut();
+  if (S.mode==="auto" && el >= S.minSec && rec.voiced >= 0.6 && now - rec.lastVoice >= 700) return cut();
 }
 $("#recBtn").onclick = () => rec.on ? stopRec() : startRec();
 $("#cutBtn").onclick = () => cut();
-document.addEventListener("visibilitychange", async () => { if (rec.on && document.visibilityState==="visible") { try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {} } });
+document.addEventListener("visibilitychange", async () => {
+  if (rec.on && document.visibilityState==="visible") { try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {} }
+});
 
-/* 上傳音檔：每個檔案一段 */
-$("#file").onchange = async e => {
-  for (const f of e.target.files) {
-    if (f.size > 25*1024*1024) { toast(f.name+" 超過 25MB，請先切小"); continue; }
-    const ext = (f.name.split(".").pop()||"m4a").toLowerCase();
-    await addSegment(f, {at:Date.now(), ext, src:"file:"+f.name});
+/* ================= 音訊處理（解碼、切段、WAV） ================= */
+async function decodeTo16k(blob){
+  const ab = await blob.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext; const ac = new AC();
+  let dec;
+  try { dec = await new Promise((res,rej) => { const p = ac.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); }); }
+  finally { try { ac.close(); } catch {} }
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const oc = new OAC(1, Math.max(1, Math.ceil(dec.duration*16000)), 16000);
+  const s = oc.createBufferSource(); s.buffer = dec; s.connect(oc.destination); s.start();
+  return (await oc.startRendering()).getChannelData(0);
+}
+function wav16(f32, sr=16000){
+  const n=f32.length, b=new ArrayBuffer(44+n*2), v=new DataView(b);
+  const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,"RIFF"); v.setUint32(4,36+n*2,true); w(8,"WAVE"); w(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,"data"); v.setUint32(40,n*2,true);
+  for (let i=0,o=44;i<n;i++,o+=2){ const s=Math.max(-1,Math.min(1,f32[i])); v.setInt16(o, s<0 ? s*0x8000 : s*0x7fff, true); }
+  return new Blob([b], {type:"audio/wav"});
+}
+function splitPCM(pcm){
+  const F=800, fps=20, n=Math.floor(pcm.length/F);
+  const rms=new Float32Array(n);
+  for (let i=0;i<n;i++){ let s=0; for (let j=i*F;j<(i+1)*F;j++) s+=pcm[j]*pcm[j]; rms[i]=Math.sqrt(s/F); }
+  const sm=new Float32Array(n);
+  for (let i=0;i<n;i++){ let s=0,c=0; for (let k=Math.max(0,i-3);k<=Math.min(n-1,i+3);k++){ s+=rms[k]; c++; } sm[i]=s/c; }
+  const noise = [...rms].sort((a,b)=>a-b)[Math.floor(n*0.1)] || 0;
+  const thr = Math.min(S.thr, Math.max(0.003, noise*3));
+  const minF=Math.round(S.minSec*fps), maxF=Math.round(S.maxSec*fps), cuts=[];
+  let pos=0;
+  while (pos < n){
+    let end;
+    if (n-pos <= maxF) end = n;
+    else { let best=pos+minF, bv=Infinity; for (let i=pos+minF; i<=pos+maxF && i<n; i++) if (sm[i] < bv){ bv=sm[i]; best=i; } end = best; }
+    let v=0; for (let i=pos;i<end;i++) if (rms[i] > thr) v++;
+    cuts.push({a:pos/fps, b:end/fps, voiced:v/fps}); pos=end;
   }
-  e.target.value = "";
+  if (!cuts.length) cuts.push({a:0, b:pcm.length/16000, voiced:0});
+  return cuts;
+}
+let pcmCache = {id:null, p:null};
+function getPCM(id){
+  if (pcmCache.id !== id) {
+    const p = (async () => { const s = await getOne("sources", id); if (!s) throw new Error("找不到原始音檔"); return decodeTo16k(s.blob); })();
+    pcmCache = {id, p};
+    p.catch(() => { if (pcmCache.id===id) pcmCache = {id:null, p:null}; });
+  }
+  return pcmCache.p;
+}
+async function segAudio(g){
+  if (g.blob) {
+    const ext = g.ext || extOf(g.blob.type) || "webm";
+    if (GROQ_OK.includes(ext)) return {blob:g.blob, ext};
+    return {blob: wav16(await decodeTo16k(g.blob)), ext:"wav"};
+  }
+  if (g.srcId) {
+    const pcm = await getPCM(g.srcId);
+    return {blob: wav16(pcm.subarray(Math.floor((g.start||0)*16000), Math.min(pcm.length, Math.ceil((g.end||0)*16000)))), ext:"wav"};
+  }
+  throw Object.assign(new Error("這段沒有保存音檔"), {noAudio:true});
+}
+async function importAudioFile(f){
+  toast("讀取 " + f.name + "…");
+  let pcm;
+  try { pcm = await decodeTo16k(f); }
+  catch {
+    const ext = extOf(f.type) || (f.name.split(".").pop()||"").toLowerCase();
+    if (f.size <= 24.5*1048576 && GROQ_OK.includes(ext)) { await addSegment(f, {ext, src:"檔案："+f.name}); return; }
+    throw new Error("瀏覽器無法解碼這個檔案");
+  }
+  const srcId = "src" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  await put("sources", {id:srcId, sid:cur.id, name:f.name, type:f.type, size:f.size, blob:f});
+  pcmCache = {id:srcId, p:Promise.resolve(pcm)};
+  const cuts = splitPCM(pcm), base = Date.now();
+  for (const c of cuts) await addSegment(null, {srcId, start:c.a, end:c.b, dur:c.b-c.a, offset:c.a, at:base + c.a*1000, src:"檔案："+f.name,
+    ext:"wav", voiced:c.voiced, skip: c.voiced < 0.6 ? "（靜音）" : ""});
+  toast(`${f.name}：切成 ${cuts.length} 段`);
+}
+$("#file").onchange = async e => {
+  const files = [...e.target.files]; e.target.value = "";
+  if (!cur) return;
+  for (const f of files) { try { await importAudioFile(f); } catch(err){ toast(f.name + "：" + err.message); } }
+  storageInfo();
 };
 
-/* ---------- Groq API ---------- */
-class ApiErr extends Error { constructor(m, status, retryAfter){ super(m); this.status=status; this.retryAfter=retryAfter; } }
+/* ================= Groq API ================= */
+class ApiErr extends Error { constructor(m, status, wait){ super(m); this.status=status; this.wait=wait||0; } }
+function parseWait(msg, hdr){
+  let ms = 0; const ra = Number(hdr); if (isFinite(ra) && ra > 0) ms = ra*1000;
+  const m = /try again in\s*(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)s)?/i.exec(msg||"");
+  if (m && (m[1]||m[2]||m[3])) ms = Math.max(ms, ((+m[1]||0)*3600 + (+m[2]||0)*60 + (+m[3]||0))*1000);
+  const m2 = /try again in\s*([\d.]+)ms/i.exec(msg||""); if (m2) ms = Math.max(ms, +m2[1]);
+  return ms ? ms + 500 : 0;
+}
 async function groq(path, init){
-  const r = await fetch("https://api.groq.com/openai/v1/"+path, {...init, headers:{Authorization:"Bearer "+S.key, ...(init.headers||{})}});
-  if (!r.ok) { let m = "HTTP "+r.status; try { const j = await r.json(); m = j.error?.message || m; } catch {}
-    const ra = Number(r.headers.get("retry-after")); throw new ApiErr(m, r.status, isFinite(ra)&&ra>0 ? ra*1000 : 0); }
+  let r;
+  try { r = await fetch("https://api.groq.com/openai/v1/"+path, {...init, headers:{Authorization:"Bearer "+S.key, ...(init.headers||{})}}); }
+  catch { throw new ApiErr("網路連線失敗", 0); }
+  if (!r.ok) {
+    let m = "HTTP " + r.status; try { const j = await r.json(); m = j.error?.message || m; } catch {}
+    throw new ApiErr(m, r.status, r.status===429 ? parseWait(m, r.headers.get("retry-after")) : 0);
+  }
   return r.json();
 }
-const vocabList = () => S.vocab.split(/[,，、\n]/).map(s=>s.trim()).filter(Boolean);
-async function transcribe(seg){
-  const fd = new FormData();
-  fd.append("file", seg.blob, "seg-"+seg.seq+"."+seg.ext);
-  fd.append("model", "whisper-large-v3-turbo");
-  fd.append("language", "zh");
-  fd.append("temperature", "0");
-  fd.append("response_format", "json");
-  const v = vocabList();
-  fd.append("prompt", ("以下是台灣的中文錄音，使用繁體字。" + (v.length ? "可能出現：" + v.join("、") + "。" : "")).slice(0, 200));
-  const j = await groq("audio/transcriptions", {method:"POST", body:fd});
-  return (j.text||"").trim();
-}
-const HALLU = /(請不吝|點贊|點讚|訂閱|轉發|打賞|字幕由|字幕製作|明鏡與點點|感謝觀看|謝謝觀看|謝謝收看|Amara|中文字幕)/;
-function looksHallucinated(t){ const s=t.replace(/[\s，。！？、,.!?]/g,""); return !s || (s.length < 40 && HALLU.test(s)); }
 
-const FIX_SYS = `你是台灣正體中文的逐字稿校對員。輸入是語音辨識（Whisper）的一小段結果，可能有簡體字、同音錯字、缺標點、斷句錯誤。
-請輸出「這一段」校正後的文字，規則：
-1. 全部轉成台灣正體中文與台灣慣用詞（例：視頻→影片、質量→品質、軟件→軟體），英文專有名詞保留原文。
-2. 修正明顯的同音或近音錯字，讓語意通順；不確定的地方保留原樣，不要猜測補寫。
-3. 加上全形標點（，。、？！：「」），依語意斷句；意思轉換明顯處可換行分段。
-4. 刪除無意義的口頭贅字（嗯、呃、那個那個），但保留說話者的原意、語氣與所有具體內容、數字、例子。
-5. 不要摘要、不要評論、不要加標題，也不要重複「前文」。只輸出校正後的本段文字。`;
-async function fixText(seg){
-  const prev = sorted().filter(g => g.seq < seg.seq && g.status!=="skip").slice(-1)[0];
-  const ctxText = prev ? (prev.text || prev.raw).slice(-200) : "";
-  const v = vocabList();
-  const user = (ctxText ? "【前文，只供參考，不要輸出】\n"+ctxText+"\n\n" : "") + (v.length ? "【詞彙表】"+v.join("、")+"\n\n" : "") + "【本段原始轉錄】\n" + seg.raw;
-  const j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
-    model:S.fixModel, temperature:0.2, reasoning_effort:"low", max_completion_tokens:2048,
-    messages:[{role:"system", content:FIX_SYS}, {role:"user", content:user}] })});
-  let out = (j.choices?.[0]?.message?.content || "").trim();
-  out = out.replace(/^(【?本段[^】\n]*】?|校正後[:：]?|修正後[:：]?)\s*/,"").replace(/^「([\s\S]*)」$/,"$1").trim();
-  if (!out) throw new ApiErr("模型沒有回傳文字", 0, 0);
+/* ================= 轉錄與幻聽偵測 ================= */
+const HALLU = /(請不吝|點贊|點讚|按讚|訂閱|轉發|打賞|字幕由|字幕製作|字幕提供|明鏡與點點|感謝觀看|謝謝觀看|謝謝收看|謝謝大家收看|Amara|中文字幕|獨播劇場|YoYo|下期再見|下次再見|本節目)/i;
+const REPEAT = /(.{2,12}?)\1{3,}/;
+function joinParts(arr){ let s=""; for (const t of arr){ if (s && /[A-Za-z0-9]$/.test(s) && /^[A-Za-z0-9]/.test(t)) s+=" "; s+=t; } return s; }
+function whisperPrompt(){ const v = vocabList(); return v.length ? v.join("、").slice(0, 200) : ""; }
+function analyze(j, dur, model, prompt){
+  const list = Array.isArray(j.segments) ? j.segments : null;
+  const kept=[], dropped=[];
+  if (list) {
+    for (const s of list) {
+      const t = String(s.text||"").trim(); if (!t) continue;
+      const nsp = typeof s.no_speech_prob==="number" ? s.no_speech_prob : 0;
+      const lp = typeof s.avg_logprob==="number" ? s.avg_logprob : null;
+      const cr = typeof s.compression_ratio==="number" ? s.compression_ratio : 1;
+      const d = Math.max(0.1, (s.end||0) - (s.start||0));
+      const bad = (nsp > 0.6 && (lp ?? 0) < -0.7) || (HALLU.test(t) && t.length < 40) || (cr > 2.6 && REPEAT.test(t));
+      (bad ? dropped : kept).push({t, lp, d, cr});
+    }
+  } else { const t = String(j.text||"").trim(); if (t) kept.push({t, lp:null, d:dur||1, cr:1}); }
+  const text = joinParts(kept.map(k=>k.t));
+  const flags=[]; let risk=0;
+  const withLp = kept.filter(k=>k.lp!=null), tw = withLp.reduce((s,k)=>s+k.d,0);
+  const lp = tw ? withLp.reduce((s,k)=>s+k.lp*k.d,0)/tw : null;
+  if (dropped.length) { flags.push(`已濾除 ${dropped.length} 句疑似幻聽`); risk += 1; }
+  if (lp != null && lp < -1.1) { flags.push("信心很低"); risk += 2; }
+  else if (lp != null && lp < -0.8) { flags.push("信心偏低"); risk += 1; }
+  if (Math.max(1, ...kept.map(k=>k.cr)) > 2.2 || REPEAT.test(text)) { flags.push("重複循環"); risk += 2; }
+  if (HALLU.test(text)) { flags.push("片尾套語"); risk += 3; }
+  if (prompt && prompt.length >= 6 && text.includes(prompt.slice(0, Math.min(12, prompt.length)))) { flags.push("詞彙表被當成內容"); risk += 3; }
+  if (dur > 3 && text.replace(/\s/g,"").length / dur > 9) { flags.push("字數異常多"); risk += 1; }
+  const lowParts = kept.filter(k => k.lp != null && k.lp < -0.9).map(k=>k.t).slice(0, 6);
+  return {model, text, lp, risk, flags, dropped:dropped.map(d=>d.t), lowParts};
+}
+async function transcribe(g, model){
+  const a = await segAudio(g);
+  const fd = new FormData();
+  fd.append("file", a.blob, `seg-${g.seq}.${a.ext}`);
+  fd.append("model", model);
+  if (S.lang) fd.append("language", S.lang);
+  fd.append("temperature", "0");
+  fd.append("response_format", "verbose_json");
+  const p = whisperPrompt(); if (p) fd.append("prompt", p);
+  const j = await groq("audio/transcriptions", {method:"POST", body:fd});
+  return analyze(j, g.dur || ((g.end||0)-(g.start||0)), model, p);
+}
+function sim(a, b){
+  const n = s => s.replace(/[\s\p{P}\p{S}]/gu, "");
+  a = n(a); b = n(b);
+  if (!a && !b) return 1; if (!a || !b) return 0;
+  if (a.length < 2 || b.length < 2) return a===b ? 1 : 0;
+  const bg = s => { const m = new Map(); for (let i=0;i<s.length-1;i++){ const k=s.slice(i,i+2); m.set(k,(m.get(k)||0)+1); } return m; };
+  const A=bg(a), B=bg(b); let inter=0; A.forEach((v,k)=>{ inter += Math.min(v, B.get(k)||0); });
+  return 2*inter / (a.length-1 + b.length-1);
+}
+function applyBest(g){
+  const A = g.alts.filter(a=>a.text);
+  let best = null;
+  if (g.prefer) best = A.find(a=>a.model===g.prefer) || null;
+  if (!best && A.length) best = A.slice().sort((x,y)=>(x.risk-y.risk) || ((y.model===V3)-(x.model===V3)))[0];
+  g.agree = null;
+  if (!best) { g.raw=""; g.flags=[]; g.asrRisk=0; g.dropped=[]; g.lowParts=[]; return; }
+  g.raw = best.text; g.model = best.model; g.lp = best.lp; g.dropped = best.dropped; g.lowParts = best.lowParts;
+  const flags = [...best.flags]; let risk = best.risk;
+  const other = g.alts.find(a => a.model !== best.model);
+  if (other) {
+    if (!other.text) { flags.push(MNAME(other.model)+" 沒聽到內容"); risk += 2; }
+    else { const s = sim(best.text, other.text); g.agree = s;
+      if (s < 0.5) { flags.push("兩模型差異大"); risk += 2; }
+      else if (s >= 0.8) { flags.push("兩模型一致"); risk = Math.max(0, risk-1); } }
+  }
+  g.flags = flags; g.asrRisk = risk;
+}
+
+/* ================= 逐段修正（gpt-oss，批次） ================= */
+const FIX_SYS = `你是台灣正體中文的逐字稿校對員。輸入是語音辨識（Whisper）的一或多個連續片段，每段標有段號。辨識結果可能含簡體字、同音錯字、缺標點，也可能含「幻聽」：音檔裡沒有說、模型自己生成的句子。
+每一段分別處理：
+1. 轉成台灣正體中文與台灣慣用詞（視頻→影片、質量→品質、軟件→軟體）；英文專有名詞保留原文。
+2. 只修正把握很高的同音錯字；加上全形標點（，。、？！：「」）並依語意斷句；刪除純口頭贅字（嗯、呃、那個那個）。
+3. 不要摘要、不要改寫語氣、不要補寫原文沒有的內容；不要把內容合併或搬到別段。
+4. 下列情況在 text 保留原樣，不要自行刪除或硬改通順，並列入 issues：
+   疑似幻聽：與前後文無關、影片片尾套語（訂閱、按讚、字幕提供、謝謝觀看）、重複循環、突然出現的人名或網址。
+   語意不通：句子斷裂、前後矛盾、看不出意思。
+   疑似錯字：可能是同音錯字但你不確定怎麼改。
+   數字或名詞存疑：數字、價格、人名、專有名詞可能聽錯。
+「系統警示」與「低信心句」是辨識系統的提示，請特別檢查這些地方。
+只輸出 JSON：
+{"segments":[{"seq":段號,"text":"校正後文字","issues":[{"quote":"text 中逐字存在的片段，15 字以內","type":"疑似幻聽|語意不通|疑似錯字|數字或名詞存疑","note":"10 字內理由","suggest":"建議改成的文字；建議刪除填空字串；不確定填 null"}]}]}
+每個輸入段號都要輸出一筆；沒有問題時 issues 為 []。`;
+const TYPES = ["疑似幻聽","語意不通","疑似錯字","數字或名詞存疑"];
+function cleanIssues(arr){
+  return (Array.isArray(arr) ? arr : []).filter(i => i && typeof i.quote==="string" && i.quote.trim()).slice(0, 12).map(i => ({
+    quote: i.quote.trim(), type: TYPES.includes(i.type) ? i.type : "語意不通", note: String(i.note||"").slice(0, 60),
+    suggest: typeof i.suggest==="string" ? i.suggest : null, state:""}));
+}
+function parseFix(s, batch){
+  const out = new Map(); const t = String(s||"").replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+  let o = null; try { o = JSON.parse(t); } catch { const m = t.match(/\{[\s\S]*\}/); if (m) try { o = JSON.parse(m[0]); } catch {} }
+  let arr = null;
+  if (o && Array.isArray(o.segments)) arr = o.segments;
+  else if (o && typeof o.text === "string") arr = [{...o, seq:batch[0].seq}];
+  if (!arr) { if (batch.length===1 && t && !t.startsWith("{")) out.set(batch[0].seq, {text:t, issues:[]}); return out; }
+  for (const x of arr) {
+    if (!x || typeof x.text !== "string") continue;
+    let seq = Number(String(x.seq ?? "").replace(/[^\d]/g, ""));
+    if (batch.length===1 && !batch.some(g=>g.seq===seq)) seq = batch[0].seq;
+    if (!batch.some(g=>g.seq===seq)) continue;
+    out.set(seq, {text:x.text.trim(), issues:cleanIssues(x.issues)});
+  }
   return out;
 }
+async function fixBatch(batch, noJson){
+  const T = TIER(), list = sorted();
+  const prev = list.filter(x => x.seq < batch[0].seq && x.status==="done" && x.text).slice(-1)[0];
+  let u = "";
+  if (prev) u += "【前文，只供參考，不要輸出】\n" + prev.text.slice(-150) + "\n\n";
+  const v = vocabList(); if (v.length) u += "【詞彙表】" + v.join("、") + "\n\n";
+  for (const g of batch) {
+    u += `【#${g.seq}】\n`;
+    const warn = g.flags.filter(f => !/一致/.test(f)); if (warn.length) u += "系統警示：" + warn.join("、") + "\n";
+    if (g.lowParts.length) u += "低信心句：" + g.lowParts.join(" / ") + "\n";
+    if (g.dropped.length) u += "已濾除（不要放回）：" + g.dropped.join(" / ") + "\n";
+    u += "原始：" + g.raw + "\n\n";
+  }
+  const body = {model:S.fixModel, temperature:0.2, reasoning_effort:"low", max_completion_tokens:T.fixTok,
+    messages:[{role:"system", content:FIX_SYS}, {role:"user", content:u.trim()}]};
+  if (!noJson) body.response_format = {type:"json_object"};
+  let j;
+  try { j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); }
+  catch(e){ if (e.status===400 && !noJson && /json|response_format/i.test(e.message)) return fixBatch(batch, true); throw e; }
+  return parseFix(j.choices?.[0]?.message?.content || "", batch);
+}
 
-/* ---------- 工作佇列（轉錄與修正分開並行，不互相阻塞） ---------- */
-const busy = {tx:new Set(), fx:new Set()};
+/* ================= 工作佇列（轉錄與修正分開並行，不阻塞錄音） ================= */
+const lanes = {tx:{busy:new Set(), until:0, hits:0}, fx:{busy:new Set(), until:0, hits:0}};
 let wakeTimer = null;
+function setPaused(on, msg, reason){
+  paused = on; pausedReason = on ? (reason||"user") : "";
+  $("#pauseBtn").textContent = on ? "繼續處理" : "暫停處理";
+  banner("pause", on ? (msg || "已暫停處理。錄音與存檔照常進行。") : "");
+  if (!on) { lanes.tx.until = lanes.fx.until = 0; pump(); }
+}
+$("#pauseBtn").onclick = () => setPaused(!paused);
+function pickBatch(list, now){
+  const T = TIER(), out = []; let chars = 0;
+  for (const g of list) {
+    const ready = g.status==="transcribed" && g.nextAt <= now && !lanes.fx.busy.has(g.id);
+    if (!ready) { if (out.length && g.status!=="skip") break; continue; }
+    if (g.solo) { if (!out.length) out.push(g); break; }
+    if (out.length && (chars + g.raw.length > T.batch || out.length >= 4)) break;
+    out.push(g); chars += g.raw.length;
+  }
+  return out;
+}
 function pump(){
-  if (!S.key || !cur) return;
-  const now = Date.now(); let soonest = Infinity;
-  const list = sorted();
-  for (const g of list) {
-    if (g.status==="queued" && !busy.tx.has(g.id)) {
-      if (g.nextAt > now) { soonest = Math.min(soonest, g.nextAt); continue; }
-      if (busy.tx.size >= S.ctx) break;
-      runTx(g);
-    }
-  }
-  for (const g of list) {
-    if (g.status==="transcribed" && !busy.fx.has(g.id)) {
-      if (g.nextAt > now) { soonest = Math.min(soonest, g.nextAt); continue; }
-      if (busy.fx.size >= S.cfx) break;
-      runFx(g);
-    }
-  }
   clearTimeout(wakeTimer);
-  if (soonest < Infinity) wakeTimer = setTimeout(pump, Math.max(200, soonest-now));
+  if (!cur || !db) return;
+  if (!S.key || paused) { renderStats(); return; }
+  const T = TIER(), now = Date.now(), list = sorted(); let soon = Infinity;
+  if (lanes.tx.until > now) soon = Math.min(soon, lanes.tx.until);
+  else for (const g of list) {
+    if (lanes.tx.busy.size >= T.tx) break;
+    if (g.status!=="queued" || lanes.tx.busy.has(g.id)) continue;
+    if (g.nextAt > now) { soon = Math.min(soon, g.nextAt); continue; }
+    runTx(g);
+  }
+  if (lanes.fx.until > now) soon = Math.min(soon, lanes.fx.until);
+  else while (lanes.fx.busy.size < T.fx) { const b = pickBatch(list, now); if (!b.length) break; runFx(b); }
+  for (const g of list) if ((g.status==="queued" || g.status==="transcribed") && g.nextAt > now) soon = Math.min(soon, g.nextAt);
+  if (soon < Infinity) wakeTimer = setTimeout(pump, Math.max(250, soon-now));
   renderStats();
 }
-function backoff(g, e, back){
-  g.tries++; g.err = e.message;
-  const fatal = e.status===401 || e.status===403 || e.status===413 || (e.status===400 && /file|audio|format/i.test(e.message));
-  if (fatal || g.tries >= 6) { g.status = back==="queued" ? "err_tx" : "err_fx"; }
-  else { g.status = back; g.nextAt = Date.now() + (e.retryAfter || Math.min(60000, 1500*2**g.tries)); }
-  if (e.status===401) toast("API key 無效，請到設定檢查");
+function handleErr(g, e, lane){
+  g.status = lane==="tx" ? "queued" : "transcribed"; g.err = e.message;
+  if (e.status===401 || e.status===403) { setPaused(true, "API key 無效或沒有權限。請到「設定與保存」檢查後按「繼續處理」。錄音與存檔照常進行。", "key"); return; }
+  if (e.status===429) {
+    const L = lanes[lane]; L.hits++;
+    const w = e.wait || Math.min(120000, 4000 * 2**Math.min(5, L.hits));
+    L.until = Math.max(L.until, Date.now() + w);
+    const daily = /per day|\bTPD\b|\bRPD\b|\bASD\b/i.test(e.message);
+    banner("rl-"+lane, `${lane==="tx"?"轉錄":"修正"}已達 Groq ${daily?"每日":"每分鐘"}額度，約 ${fmtWait(w)} 後自動繼續。錄音與存檔不受影響。`);
+    return;
+  }
+  if (e.status===0 && !navigator.onLine) { lanes[lane].until = Date.now() + 5000; banner("net", "目前離線，恢復連線後會自動繼續。"); return; }
+  g.tries++;
+  const fatal = lane==="tx" && (e.status===400 || e.status===413);
+  if (fatal || g.tries >= 6) { g.status = lane==="tx" ? "err_tx" : "err_fx"; return; }
+  g.nextAt = Date.now() + Math.min(60000, 1500 * 2**g.tries);
 }
 async function runTx(g){
-  busy.tx.add(g.id); g.status="transcribing"; g.err=""; render();
+  const model = g.forceModel || S.asr;
+  lanes.tx.busy.add(g.id); g.status = "transcribing"; g.err = ""; touch(g); render();
   try {
-    const t = await transcribe(g);
-    g.raw = t; g.tries = 0; g.nextAt = 0;
-    if (looksHallucinated(t)) { g.status="skip"; g.text="（無有效語音，略過）"; }
-    else g.status = "transcribed";
-  } catch(e){ backoff(g, e, "queued"); }
-  finally { busy.tx.delete(g.id); saveSeg(g, true); render(); pump(); }
+    const r = await transcribe(g, model);
+    lanes.tx.hits = 0; banner("rl-tx"); banner("net");
+    g.alts = g.alts.filter(a => a.model !== model); g.alts.push(r);
+    g.tries = 0; g.nextAt = 0;
+    const oth = model===V3 ? TURBO : V3;
+    const wantOther = !g.forceModel && !g.alts.some(a => a.model===oth) &&
+      (S.escalate==="all" || (S.escalate==="v3" && (r.risk >= 2 || (!r.text && (g.voiced||0) >= 2))));
+    applyBest(g);
+    if (wantOther) { g.forceModel = oth; g.status = "queued"; }
+    else { g.forceModel = null; if (g.raw) g.status = "transcribed"; else { g.status = "skip"; g.text = "（沒有辨識到語音內容）"; } }
+  } catch(e) {
+    if (e.noAudio) { g.status = "err_tx"; g.err = e.message; } else handleErr(g, e, "tx");
+  } finally {
+    lanes.tx.busy.delete(g.id); computeRisk(g); touch(g); saveSeg(g, true); render(); if (rvId===g.id) fillReview(false); pump();
+  }
 }
-async function runFx(g){
-  busy.fx.add(g.id); g.status="fixing"; g.err=""; render();
+async function runFx(batch){
+  for (const g of batch) { lanes.fx.busy.add(g.id); g.status = "fixing"; g.err = ""; touch(g); }
+  render();
   try {
-    const t = await fixText(g);
-    if (!g.edited) g.text = t;
-    g.status = "done"; g.tries = 0; g.nextAt = 0;
-  } catch(e){ backoff(g, e, "transcribed"); }
-  finally { busy.fx.delete(g.id); saveSeg(g, true); render(); pump(); }
+    const res = await fixBatch(batch);
+    lanes.fx.hits = 0; banner("rl-fx"); banner("net");
+    for (const g of batch) {
+      const r = res.get(g.seq);
+      if (!r) { g.status = "transcribed"; if (batch.length > 1) g.solo = true; else { g.tries++; g.nextAt = Date.now() + 3000; if (g.tries >= 4) { g.status="err_fx"; g.err="修正模型沒有回傳可用的結果"; } } continue; }
+      let text = r.text, issues = r.issues;
+      if (!text) { text = g.raw; issues.push({quote:g.raw.slice(0,15), type:"疑似幻聽", note:"修正模型判斷整段可疑", suggest:"", state:""}); }
+      if (!g.edited) g.text = text;
+      g.issues = issues; recheckIssues(g);
+      g.status = "done"; g.tries = 0; g.nextAt = 0; g.solo = false;
+    }
+  } catch(e) {
+    for (const g of batch) { handleErr(g, e, "fx"); if (batch.length > 1 && e.status===413) g.solo = true; }
+  } finally {
+    for (const g of batch) { lanes.fx.busy.delete(g.id); computeRisk(g); touch(g); saveSeg(g, true); }
+    render(); if (rvId && batch.some(g=>g.id===rvId)) fillReview(false); pump();
+  }
 }
-window.addEventListener("online", pump);
+function redo(g, model){
+  if (g.text && g.status==="done") pushHist(g, g.text);
+  g.alts = model ? g.alts.filter(a=>a.model!==model) : [];
+  g.forceModel = model || null; g.prefer = model || null;
+  g.edited = false; g.reviewed = false; g.issues = []; g.orgNote = ""; g.tries = 0; g.nextAt = 0; g.err = ""; g.userSkip = false; g.solo = false;
+  g.text = ""; g.status = hasAudio(g) ? "queued" : (g.raw ? "transcribed" : "err_tx");
+  computeRisk(g); touch(g); saveSeg(g, true); render(); pump();
+}
+function refix(g){
+  if (!g.raw) return toast("這段沒有原始辨識結果");
+  if (g.text && g.status==="done") pushHist(g, g.text);
+  g.edited = false; g.reviewed = false; g.issues = []; g.tries = 0; g.nextAt = 0; g.err = ""; g.solo = true; g.status = "transcribed";
+  computeRisk(g); touch(g); saveSeg(g, true); render(); pump();
+}
+window.addEventListener("online", () => { banner("net"); lanes.tx.until = lanes.fx.until = 0; pump(); });
 
-/* ---------- 畫面 ---------- */
-const STAT = {queued:["等待轉錄","q"], transcribing:["轉錄中","t"], transcribed:["等待修正","q"], fixing:["修正中","t"], done:["完成","d"], skip:["略過","q"], err_tx:["轉錄失敗","e"], err_fx:["修正失敗","e"]};
-let rq = 0, full = false;
-function render(force){ if (force) full = true; if (rq) return; rq = requestAnimationFrame(()=>{ rq=0; draw(full); full=false; }); }
+/* ================= 文字工具 ================= */
+const TYPECLS = {"疑似幻聽":"hl-h", "語意不通":"hl-s", "疑似錯字":"hl-t", "數字或名詞存疑":"hl-t"};
+function pushHist(g, text){ if (!text) return; if (g.history[0]?.text === text) return; g.history.unshift({t:Date.now(), text}); g.history = g.history.slice(0, 20); }
+function recheckIssues(g){ const t = g.text || ""; for (const i of g.issues) if (!i.state && i.quote && !t.includes(i.quote)) i.state = "fixed"; computeRisk(g); }
+function hlText(g){
+  const t = g.text || g.raw || ""; const ranges = [];
+  for (const i of g.issues || []) { if (i.state || !i.quote) continue; const p = t.indexOf(i.quote); if (p >= 0) ranges.push({a:p, b:p+i.quote.length, cls:TYPECLS[i.type]||"hl-s", tip:i.type+(i.note?"："+i.note:"")}); }
+  ranges.sort((x,y)=>x.a-y.a);
+  let out = "", pos = 0;
+  for (const r of ranges) { if (r.a < pos) continue; out += esc(t.slice(pos, r.a)) + `<mark class="${r.cls}" title="${esc(r.tip)}">` + esc(t.slice(r.a, r.b)) + "</mark>"; pos = r.b; }
+  return out + esc(t.slice(pos));
+}
+function confChip(g){
+  if (g.lp == null) return "";
+  const [lab, cls] = g.lp >= -0.45 ? ["高","d"] : g.lp >= -0.8 ? ["中",""] : ["低","e"];
+  return `<span class="chip ${cls}" title="平均 log 機率 ${g.lp.toFixed(2)}">信心${lab}</span>`;
+}
+const flagChip = f => `<span class="chip ${/一致/.test(f)?"d":"w"}">${esc(f)}</span>`;
+
+/* ================= 畫面：統計、篩選、列表 ================= */
+const STAT = {queued:["等待轉錄","q"], transcribing:["轉錄中","t"], transcribed:["等待修正","q"], fixing:["修正中","t"], done:["完成","d"], skip:["已略過","q"], err_tx:["轉錄失敗","e"], err_fx:["修正失敗","e"]};
+const FILTERS = {
+  all:{name:"全部", fn:g=>true},
+  review:{name:"待審閱", fn:needsReview},
+  err:{name:"失敗", fn:g=>g.status==="err_tx"||g.status==="err_fx"},
+  edited:{name:"已手改", fn:g=>g.edited},
+  ok:{name:"已確認", fn:g=>g.reviewed},
+  skip:{name:"已略過", fn:g=>g.status==="skip"}
+};
+let rq = 0;
+function render(){ if (rq) return; rq = requestAnimationFrame(() => { rq = 0; drawList(); drawFilters(); renderStats(); drawMerged(); }); }
 function renderStats(){
-  const c = {}; segs.forEach(g => c[g.status]=(c[g.status]||0)+1);
-  const wait = (c.queued||0)+(c.transcribed||0);
+  const c = {}; let bytes = 0; segs.forEach(g => { c[g.status] = (c[g.status]||0) + 1; if (g.blob) bytes += g.blob.size || 0; });
+  const wait = (c.queued||0) + (c.transcribed||0), busyN = (c.transcribing||0) + (c.fixing||0), rv = sorted().filter(needsReview).length;
   $("#stats").innerHTML = [
     `<span class="chip">共 ${segs.size} 段</span>`,
-    wait ? `<span class="chip q">排隊 ${wait}</span>` : "",
-    (c.transcribing||c.fixing) ? `<span class="chip t">處理中 ${(c.transcribing||0)+(c.fixing||0)}</span>` : "",
+    wait ? `<span class="chip">排隊 ${wait}</span>` : "",
+    busyN ? `<span class="chip t">處理中 ${busyN}</span>` : "",
     `<span class="chip d">完成 ${c.done||0}</span>`,
-    (c.err_tx||c.err_fx) ? `<span class="chip e">失敗 ${(c.err_tx||0)+(c.err_fx||0)}</span>` : "",
+    rv ? `<button type="button" class="chip e" id="statRv">待審閱 ${rv}</button>` : "",
+    bytes ? `<span class="chip">音檔 ${MB(bytes)}</span>` : "",
+    paused ? `<span class="chip w">已暫停</span>` : "",
     !S.key ? `<span class="chip e">尚未設定 API key</span>` : ""
   ].join("");
+  const b = $("#statRv"); if (b) b.onclick = () => { setFilter("review"); showTab("segs"); };
 }
-function segHTML(g){
-  const [lab, cls] = STAT[g.status] || [g.status,"q"];
-  const shown = g.text || g.raw || "";
-  const placeholder = {queued:"等待轉錄…", transcribing:"轉錄中…"}[g.status];
-  return `<div class="seg ${g.status==="skip"?"skip":""}" data-id="${g.id}">
+function setFilter(f){ filter = f; drawFilters(); drawList(); }
+function drawFilters(){
+  const all = sorted();
+  $("#filters").innerHTML = Object.entries(FILTERS).map(([k,f]) => `<button type="button" data-f="${k}" class="${k===filter?"on":""}">${f.name} ${all.filter(f.fn).length}</button>`).join("");
+}
+$("#filters").addEventListener("click", e => { const b = e.target.closest("button[data-f]"); if (b) setFilter(b.dataset.f); });
+function rowHTML(g){
+  const [lab, cls] = STAT[g.status] || [g.status, ""];
+  const t = g.text || g.raw;
+  const body = t ? hlText(g) : `<span class="ph">${g.status==="transcribing"?"轉錄中…":g.status.startsWith("err")?"沒有結果":"等待轉錄…"}</span>`;
+  const openN = openIssues(g).length, active = !/done|skip/.test(g.status);
+  return `<div class="seg${g.status==="skip"?" skip":""}${needsReview(g)?" need":""}${g.id===rvId?" cur":""}" data-id="${esc(g.id)}">
     <div class="n">#${g.seq}<span>${clock(g.at)}</span></div>
     <div class="body">
-      <div class="txt" ${g.status==="done"||g.edited?'contenteditable="true"':""} spellcheck="false">${esc(shown || placeholder || "")}</div>
-      ${g.raw && g.text && g._showRaw ? `<div class="raw">原始：${esc(g.raw)}</div>` : ""}
+      <div class="txt" tabindex="0" role="button" aria-label="審閱第 ${g.seq} 段">${body}</div>
       <div class="meta">
-        <span class="chip ${cls}">${lab}${g.tries&&g.status!=="done"?" · 重試"+g.tries:""}</span>
-        ${g.dur?`<span class="chip">${g.dur.toFixed(1)}s</span>`:""}
-        ${g.edited?`<span class="chip">已手改</span>`:""}
-        ${g.raw && g.text ? `<button type="button" data-act="raw">${g._showRaw?"隱藏原始":"原始"}</button>`:""}
-        ${g.blob ? `<button type="button" data-act="play">播放</button>`:""}
-        ${(g.status.startsWith("err")||g.status==="done"||g.status==="skip") && (g.blob||g.raw) ? `<button type="button" data-act="redo">重做</button>`:""}
-        ${g.err && g.status!=="done" ? `<span class="note" style="color:var(--err)">${esc(g.err).slice(0,120)}</span>`:""}
+        <span class="chip ${cls}">${lab}${g.tries && active ? " · 重試 "+g.tries : ""}</span>
+        ${g.model ? `<span class="chip">${MNAME(g.model)}</span>` : ""}${confChip(g)}
+        ${g.flags.map(flagChip).join("")}
+        ${openN ? `<span class="chip e">待確認 ${openN}</span>` : ""}${g.orgNote ? `<span class="chip e">整理時標註</span>` : ""}
+        ${g.edited ? `<span class="chip">已手改</span>` : ""}${g.reviewed && g.status!=="skip" ? `<span class="chip d">已確認</span>` : ""}
+        ${g.dur ? `<span class="chip">${Number(g.dur).toFixed(1)}s</span>` : ""}
+        ${hasAudio(g) ? `<button type="button" data-act="play">播放</button>` : ""}
+        <button type="button" data-act="open">審閱</button>
+        ${g.err && active ? `<span class="note err">${esc(g.err.slice(0,140))}</span>` : ""}
       </div>
     </div></div>`;
 }
-function draw(force){
-  renderStats();
-  const pane = $("#p-segs");
-  const list = sorted();
-  if (!list.length) { pane.innerHTML = '<p class="empty">按紅色按鈕開始錄音。說話停頓時會自動切段送出，轉錄與修正在背景排隊進行，錄音不會等待。</p>'; drawMerged(); return; }
-  const editing = document.activeElement?.closest?.(".seg")?.dataset.id;
-  if (force || !pane.querySelector(".seg")) pane.innerHTML = list.map(segHTML).join("");
-  else {
-    // 增量更新：只替換有變動的段落，保留正在編輯的那一段
-    const have = new Map([...pane.querySelectorAll(".seg")].map(el=>[el.dataset.id, el]));
-    let prevEl = null;
-    for (const g of list) {
-      const sig = g.status+"|"+g.tries+"|"+g.text.length+"|"+g.raw.length+"|"+(g._showRaw?1:0)+"|"+(g.blob?1:0)+"|"+(g.edited?1:0);
-      let el = have.get(g.id);
-      if (el && (el._sig !== sig) && g.id !== editing) { const n = document.createElement("div"); n.innerHTML = segHTML(g); const ne=n.firstElementChild; el.replaceWith(ne); el = ne; }
-      else if (!el) { const n = document.createElement("div"); n.innerHTML = segHTML(g); el = n.firstElementChild; prevEl ? prevEl.after(el) : pane.prepend(el); }
-      el._sig = sig; prevEl = el;
+function drawList(){
+  const box = $("#segList"), all = sorted(), list = all.filter(FILTERS[filter].fn);
+  if (!all.length) { box.innerHTML = '<p class="empty">按紅色按鈕開始錄音，或上傳音檔。說話停頓時會自動切段送出；轉錄、幻聽檢查與修正都在背景排隊進行，錄音不用等。</p>'; return; }
+  if (!list.length) { box.innerHTML = `<p class="empty">「${FILTERS[filter].name}」目前沒有段落。</p>`; return; }
+  box.querySelectorAll(":scope > :not(.seg)").forEach(e => e.remove());
+  const have = new Map([...box.querySelectorAll(".seg")].map(el => [el.dataset.id, el]));
+  const order = [];
+  for (const g of list) {
+    let el = have.get(g.id);
+    if (!el || el._v !== g._v || el._cur !== (g.id===rvId)) {
+      const d = document.createElement("div"); d.innerHTML = rowHTML(g); const n = d.firstElementChild; n._v = g._v; n._cur = g.id===rvId;
+      if (el) el.replaceWith(n); el = n;
     }
+    have.delete(g.id); order.push(el);
   }
-  drawMerged();
+  have.forEach(el => el.remove());
+  let prev = null;
+  for (const el of order) { if (prev ? prev.nextElementSibling !== el : box.firstElementChild !== el) { if (prev) prev.after(el); else box.prepend(el); } prev = el; }
 }
-function mergedText(){
-  const parts = sorted().filter(g=>g.status==="done" && g.text).map(g=>g.text.trim());
-  const paras = []; let buf = "";
-  for (const p of parts) {
-    const pieces = p.split(/\n+/);
-    pieces.forEach((x,i) => { if (i>0 && buf) { paras.push(buf); buf=""; } buf += x; });
-    if (buf.length > 260 && /[。！？」]$/.test(buf)) { paras.push(buf); buf=""; }
+const player = new Audio(); let playerUrl = "";
+async function playSeg(g){
+  try { const a = await segAudio(g); if (playerUrl) URL.revokeObjectURL(playerUrl); playerUrl = URL.createObjectURL(a.blob); player.src = playerUrl; await player.play(); }
+  catch(e){ toast("無法播放：" + e.message); }
+}
+$("#segList").addEventListener("click", e => {
+  const row = e.target.closest(".seg"); if (!row) return;
+  const g = segs.get(row.dataset.id); if (!g) return;
+  const b = e.target.closest("button[data-act]");
+  if (b && b.dataset.act==="play") return playSeg(g);
+  if (b || e.target.closest(".txt")) openReview(g.id);
+});
+$("#segList").addEventListener("keydown", e => { if ((e.key==="Enter"||e.key===" ") && e.target.classList.contains("txt")) { e.preventDefault(); openReview(e.target.closest(".seg").dataset.id); } });
+function showTab(t){
+  $$(".tabs button").forEach(x => x.classList.toggle("on", x.dataset.tab===t));
+  ["segs","merged","org"].forEach(k => $("#p-"+k).hidden = k!==t);
+}
+$$(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+/* ================= 審閱面板 ================= */
+let rvId = null, rvUrl = "", taSnap = null;
+const ta = $("#rvText"), au = $("#rvAudio");
+function openReview(id){
+  const g = segs.get(id); if (!g) return;
+  const changed = rvId !== id; rvId = id;
+  $("#rv").hidden = false; document.body.classList.add("rv-open");
+  fillReview(true);
+  if (changed) loadReviewAudio(g);
+  render();
+  const row = document.querySelector(`.seg[data-id="${CSS.escape(id)}"]`); row?.scrollIntoView({block:"nearest"});
+}
+function closeReview(){
+  if (!rvId) return;
+  commitTa(); rvId = null; $("#rv").hidden = true; document.body.classList.remove("rv-open");
+  au.pause(); if (rvUrl) { URL.revokeObjectURL(rvUrl); rvUrl = ""; } au.removeAttribute("src"); render();
+}
+async function loadReviewAudio(g){
+  au.pause(); if (rvUrl) { URL.revokeObjectURL(rvUrl); rvUrl = ""; } au.removeAttribute("src");
+  $("#rvNoAudio").hidden = hasAudio(g); au.hidden = !hasAudio(g); $("#rvRate").hidden = !hasAudio(g);
+  if (!hasAudio(g)) return;
+  try {
+    const a = await segAudio(g); if (rvId !== g.id) return;
+    rvUrl = URL.createObjectURL(a.blob); au.src = rvUrl; au.playbackRate = Number($("#rvRate .on")?.dataset.rate || 1); au.loop = $("#rvLoop").checked;
+    if (S.autoplay) au.play().catch(()=>{});
+  } catch(e){ $("#rvNoAudio").hidden = false; $("#rvNoAudio").textContent = "無法載入音檔：" + e.message; }
+}
+function fillReview(full){
+  const g = segs.get(rvId); if (!g) return closeReview();
+  const rvList = sorted().filter(needsReview);
+  $("#rvTitle").textContent = `#${g.seq}`;
+  $("#rvPos").textContent = `${clock(g.at)}${g.dur ? " · "+Number(g.dur).toFixed(1)+" 秒" : ""} · 待審閱 ${rvList.length} 段`;
+  const [lab, cls] = STAT[g.status] || [g.status, ""];
+  $("#rvChips").innerHTML = `<span class="chip ${cls}">${lab}</span>${g.model ? `<span class="chip">${MNAME(g.model)}</span>` : ""}${confChip(g)}${g.flags.map(flagChip).join("")}${g.reviewed ? '<span class="chip d">已確認</span>' : ""}${g.err && g.status.startsWith("err") ? `<span class="note err">${esc(g.err)}</span>` : ""}`;
+  const val = g.status==="skip" && !g.userSkip ? "" : (g.text || g.raw || "");
+  if (full || (document.activeElement !== ta && ta.value !== val)) { ta.value = val; }
+  ta.placeholder = g.status==="queued"||g.status==="transcribing" ? "辨識中…" : g.status==="transcribed"||g.status==="fixing" ? "修正中…（可先直接修改）" : "";
+  // 問題清單
+  let h = "";
+  if (g.orgNote) h += `<div class="iss hl-s"><div><b>整理時標註</b> ${esc(g.orgNote)}</div><div class="row tight"><button type="button" data-org="clear">已處理</button></div></div>`;
+  g.issues.forEach((i,k) => {
+    h += `<div class="iss ${TYPECLS[i.type]||"hl-s"}${i.state?" done":""}"><div><b>${esc(i.type)}</b>「${esc(i.quote)}」${i.note?` <span class="note">${esc(i.note)}</span>`:""}${i.suggest?` → 「${esc(i.suggest)}」`:i.suggest===""?" → 建議刪除":""}${i.state?` <span class="note">（${i.state==="fixed"?"已處理":"保留原文"}）</span>`:""}</div>`;
+    if (!i.state) h += `<div class="row tight">${i.suggest!=null?`<button type="button" data-iss="${k}" data-op="acc">${i.suggest===""?"刪除這句":"採用建議"}</button>`:""}${i.suggest!==""?`<button type="button" data-iss="${k}" data-op="del">刪除這句</button>`:""}<button type="button" data-iss="${k}" data-op="ign">保留原文</button><button type="button" data-iss="${k}" data-op="find">選取</button></div>`;
+    h += `</div>`;
+  });
+  $("#rvIssues").innerHTML = h;
+  // 原始辨識
+  $("#rvAlts").innerHTML = g.alts.length ? g.alts.map(a => `<div class="alt"><div class="rvchips"><span class="chip">${MNAME(a.model)}</span>${a.lp!=null?`<span class="chip">信心 ${a.lp.toFixed(2)}</span>`:""}${a.flags.map(flagChip).join("")}${a.model===g.model?'<span class="chip d">目前採用</span>':(a.text?`<button type="button" data-alt="${esc(a.model)}">改用這版重新修正</button>`:"")}</div><div class="rawtxt">${esc(a.text) || "（沒有內容）"}</div></div>`).join("")
+    + (g.agree!=null ? `<p class="note">兩模型相似度 ${(g.agree*100).toFixed(0)}%</p>` : "") : '<p class="note">還沒有辨識結果。</p>';
+  $("#rvDropped").innerHTML = g.dropped.length ? `<div class="alt"><span class="note">自動濾除的疑似幻聽（不會出現在逐字稿）</span><div class="rawtxt">${g.dropped.map(esc).join("<br>")}</div></div>` : "";
+  $("#rvHist").innerHTML = g.history.length ? `<div class="alt"><span class="note">修改紀錄</span>${g.history.map((x,k)=>`<div class="hist"><span class="note">${clock(x.t)}</span><span class="t">${esc(x.text)}</span><button type="button" data-hist="${k}">還原</button></div>`).join("")}</div>` : "";
+  $("#rvSkip").textContent = g.status==="skip" ? (g.userSkip ? "放回逐字稿" : "重新辨識這段") : "從逐字稿移除";
+  $("#rvV3").disabled = $("#rvTurbo").disabled = !hasAudio(g);
+}
+function editText(g, text, snap){
+  if (snap != null && snap !== text) pushHist(g, snap);
+  g.text = text; g.edited = true; recheckIssues(g); touch(g); saveSeg(g); render();
+}
+function commitTa(){ const g = segs.get(rvId); if (g && taSnap != null && taSnap !== ta.value) { pushHist(g, taSnap); saveSeg(g, true); } taSnap = null; }
+ta.addEventListener("focus", () => { taSnap = ta.value; });
+ta.addEventListener("input", () => { const g = segs.get(rvId); if (!g) return; editText(g, ta.value); clearTimeout(ta._h); ta._h = setTimeout(() => fillReviewSoft(), 300); });
+ta.addEventListener("blur", () => { commitTa(); fillReviewSoft(); });
+function fillReviewSoft(){ if (rvId) fillReview(false); }
+$("#rvIssues").addEventListener("click", e => {
+  const g = segs.get(rvId); if (!g) return;
+  if (e.target.closest("[data-org]")) { g.orgNote = ""; computeRisk(g); touch(g); saveSeg(g, true); fillReview(false); render(); return; }
+  const b = e.target.closest("button[data-iss]"); if (!b) return;
+  const i = g.issues[+b.dataset.iss]; if (!i) return;
+  const t = ta.value;
+  if (b.dataset.op === "find") { const p = t.indexOf(i.quote); if (p >= 0) { ta.focus(); ta.setSelectionRange(p, p + i.quote.length); } else toast("文字裡找不到這段"); return; }
+  if (b.dataset.op === "ign") { i.state = "ignored"; computeRisk(g); touch(g); saveSeg(g, true); fillReview(false); render(); return; }
+  const rep = b.dataset.op === "acc" ? (i.suggest ?? "") : "";
+  let nt = t.includes(i.quote) ? t.replace(i.quote, rep) : t;
+  nt = nt.replace(/([，。、？！：])\1+/g, "$1").replace(/^[，。、]+/, "").trim();
+  i.state = "fixed"; ta.value = nt; editText(g, nt, t); fillReview(false);
+});
+$("#rvAlts").addEventListener("click", e => {
+  const b = e.target.closest("button[data-alt]"); if (!b) return; const g = segs.get(rvId); if (!g) return;
+  g.prefer = b.dataset.alt; applyBest(g); refix(g); fillReview(true);
+});
+$("#rvHist").addEventListener("click", e => {
+  const b = e.target.closest("button[data-hist]"); if (!b) return; const g = segs.get(rvId); if (!g) return;
+  const h = g.history[+b.dataset.hist]; if (!h) return;
+  const old = g.text; editText(g, h.text, old); ta.value = h.text; fillReview(false);
+});
+function confirmSeg(){
+  const g = segs.get(rvId); if (!g) return;
+  commitTa();
+  if (g.status==="done" || g.status==="skip") { g.reviewed = true; g.orgNote = ""; touch(g); saveSeg(g, true); render(); }
+  else toast("這段還在處理中，先跳到下一段");
+  step(1, true);
+}
+function step(dir, reviewOnly){
+  const list = sorted(); const i = list.findIndex(x => x.id===rvId);
+  const seq = dir > 0 ? [...list.slice(i+1), ...list.slice(0, Math.max(0,i))] : [...list.slice(0, Math.max(0,i)).reverse(), ...list.slice(i+1).reverse()];
+  const nx = seq.find(needsReview) || (reviewOnly ? null : (dir > 0 ? list[i+1] : list[i-1]));
+  if (nx) { commitTa(); openReview(nx.id); }
+  else if (reviewOnly) { toast("沒有待審閱的段落了"); closeReview(); }
+}
+$("#rvOk").onclick = confirmSeg;
+$("#rvNext").onclick = () => { const list = sorted(), i = list.findIndex(x=>x.id===rvId); if (list[i+1]) openReview(list[i+1].id); };
+$("#rvPrev").onclick = () => { const list = sorted(), i = list.findIndex(x=>x.id===rvId); if (i > 0) openReview(list[i-1].id); };
+$("#rvClose").onclick = closeReview;
+$("#rvRefix").onclick = () => { const g = segs.get(rvId); if (g) { refix(g); fillReview(true); } };
+$("#rvV3").onclick = () => { const g = segs.get(rvId); if (g) { redo(g, V3); fillReview(true); } };
+$("#rvTurbo").onclick = () => { const g = segs.get(rvId); if (g) { redo(g, TURBO); fillReview(true); } };
+$("#rvSkip").onclick = () => {
+  const g = segs.get(rvId); if (!g) return;
+  if (g.status === "skip") { if (g.userSkip) { g.userSkip = false; g.status = g.text ? "done" : "transcribed"; touch(g); saveSeg(g, true); render(); pump(); } else redo(g); }
+  else if (/done|err_tx|err_fx/.test(g.status)) { commitTa(); g.userSkip = true; g.status = "skip"; g.reviewed = true; touch(g); saveSeg(g, true); render(); }
+  else return toast("處理中的段落無法移除");
+  fillReview(true);
+};
+$("#rvRate").addEventListener("click", e => { const b = e.target.closest("button[data-rate]"); if (!b) return; $$("#rvRate button").forEach(x => x.classList.toggle("on", x===b)); au.playbackRate = Number(b.dataset.rate); });
+$("#rvLoop").onchange = e => { au.loop = e.target.checked; };
+$("#reviewBtn").onclick = () => { const g = sorted().find(needsReview); if (g) openReview(g.id); else toast("目前沒有待審閱的段落"); };
+document.addEventListener("keydown", e => {
+  if (!rvId) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (e.key === "Escape") { e.preventDefault(); closeReview(); }
+  else if (mod && e.key === "Enter") { e.preventDefault(); confirmSeg(); }
+  else if (mod && (e.key === "k" || e.key === "K")) { e.preventDefault(); if (au.src) au.paused ? au.play().catch(()=>{}) : au.pause(); }
+});
+
+/* ================= 全文尋找與取代 ================= */
+function frCount(){ const a = $("#frFind").value; if (!a) { $("#frCount").textContent = ""; return; } let n = 0; segs.forEach(g => { if (g.text) n += g.text.split(a).length - 1; }); $("#frCount").textContent = `符合 ${n} 處`; }
+$("#frFind").addEventListener("input", frCount);
+$("#frGo").onclick = () => {
+  const a = $("#frFind").value, b = $("#frRep").value; if (!a) return toast("請輸入要尋找的文字");
+  let n = 0;
+  segs.forEach(g => { if (!g.text || !g.text.includes(a)) return; const c = g.text.split(a).length - 1; const old = g.text; editText(g, old.split(a).join(b), old); saveSeg(g, true); n += c; });
+  if ($("#frVocab").checked && b && !vocabList().includes(b)) { S.vocab = S.vocab ? S.vocab + "、" + b : b; $("#vocab").value = S.vocab; LS.set("settings", S); }
+  toast(`已取代 ${n} 處`); frCount(); if (rvId) fillReview(true);
+};
+
+/* ================= 合併稿 ================= */
+function mergedParas(){
+  const paras = []; let curP = [], len = 0;
+  for (const g of sorted()) {
+    if (g.status !== "done" || !g.text) continue;
+    g.text.trim().split(/\n+/).forEach((x, i) => { if (i > 0 && curP.length) { paras.push(curP); curP = []; len = 0; } curP.push({g, t:x}); len += x.length; });
+    if (len > 260 && /[。！？」]$/.test(g.text.trim())) { paras.push(curP); curP = []; len = 0; }
   }
-  if (buf) paras.push(buf);
+  if (curP.length) paras.push(curP);
   return paras;
 }
+const mergedText = () => mergedParas().map(p => p.map(x => x.t).join("")).join("\n\n");
 function drawMerged(){
-  const paras = mergedText();
-  $("#mergedDoc").innerHTML = paras.length ? paras.map(p=>`<p>${esc(p)}</p>`).join("") : '<p class="empty">還沒有完成的段落。</p>';
+  if ($("#p-merged").hidden) return;
+  const flag = $("#mFlag").checked, paras = mergedParas();
+  $("#mergedDoc").innerHTML = paras.length ? paras.map(p => "<p>" + p.map(x => `<span class="ms${flag && needsReview(x.g) ? " flag" : ""}" data-id="${esc(x.g.id)}">${esc(x.t)}</span>`).join("") + "</p>").join("") : '<p class="empty">還沒有完成的段落。</p>';
 }
-$("#p-segs").addEventListener("click", e => {
-  const b = e.target.closest("button[data-act]"); if (!b) return;
-  const g = segs.get(b.closest(".seg").dataset.id); if (!g) return;
-  if (b.dataset.act==="raw") { g._showRaw = !g._showRaw; render(); }
-  if (b.dataset.act==="play") { const a = new Audio(URL.createObjectURL(g.blob)); a.play().catch(()=>toast("無法播放此格式")); a.onended=()=>URL.revokeObjectURL(a.src); }
-  if (b.dataset.act==="redo") { g.tries=0; g.nextAt=0; g.edited=false; g.err=""; g.status = g.blob ? "queued" : "transcribed"; g.text=""; saveSeg(g,true); render(); pump(); }
-});
-$("#p-segs").addEventListener("input", e => {
-  const el = e.target.closest(".txt"); if (!el) return;
-  const g = segs.get(el.closest(".seg").dataset.id); g.text = el.innerText; g.edited = true; saveSeg(g); drawMerged();
-});
-$("#p-segs").addEventListener("focusout", e => { if (e.target.closest(".txt")) render(); });
-document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
-  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on", x===b));
-  ["segs","merged","org"].forEach(t => $("#p-"+t).hidden = t!==b.dataset.tab);
-});
+$("#mFlag").onchange = drawMerged;
+$$(".tabs button").forEach(b => b.addEventListener("click", drawMerged));
+$("#mergedDoc").addEventListener("click", e => { const s = e.target.closest(".ms"); if (s) openReview(s.dataset.id); });
 
-/* ---------- 匯出 ---------- */
-function download(name, text, type){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
+/* ================= 匯出（下載、複製） ================= */
+function download(name, data, type){
+  const blob = data instanceof Blob ? data : new Blob([data], {type});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
 async function copy(text){ try { await navigator.clipboard.writeText(text); toast("已複製"); } catch { toast("無法複製，請手動選取"); } }
-const fname = ext => (cur.name.replace(/[\\/:*?"<>|\s]+/g,"_")) + "." + ext;
-$("#copyMerged").onclick = () => copy(mergedText().join("\n\n"));
-$("#dlMerged").onclick = () => download(fname("txt"), mergedText().join("\n\n"), "text/plain;charset=utf-8");
+const fname = ext => cur.name.replace(/[\\/:*?"<>|\s]+/g, "_") + "." + ext;
+$("#copyMerged").onclick = () => copy(mergedText());
+$("#dlMerged").onclick = () => download(fname("txt"), mergedText(), "text/plain;charset=utf-8");
 $("#copyOrg").onclick = () => cur.organized ? copy(cur.organized) : toast("還沒有整理稿");
 $("#dlOrg").onclick = () => cur.organized ? download(fname("md"), cur.organized, "text/markdown;charset=utf-8") : toast("還沒有整理稿");
-$("#dlJson").onclick = () => download(fname("json"), JSON.stringify({session:cur, segments:sorted().map(({blob,_showRaw,...r})=>r)}, null, 2), "application/json");
-$("#clearAudio").onclick = async () => { let n=0; for (const g of segs.values()) if (g.blob && (g.status==="done"||g.status==="skip")) { g.blob=null; n++; await saveSeg(g,true); } render(true); $("#setMsg").textContent = `已刪除 ${n} 個音檔`; };
 
-/* ---------- 整理全文 ---------- */
-const ORG_PART = `你是筆記整理者。以下是一段台灣正體中文逐字稿（已校對）的一部分。請整理成 Markdown：
-- 依內容主題切成數個「### 小標」，每節用通順的段落改寫，必要時用條列。
-- 保留所有具體資訊：數字、名稱、例子、步驟、條件、結論；刪掉重複與口語贅詞。
-- 不可杜撰原文沒有的內容；聽不清或不確定處標「（？）」。
-- 不要寫總標題與摘要，只輸出各小節。使用台灣正體中文與全形標點。`;
-const ORG_FINAL = `你是筆記編輯。以下是依序整理好的筆記小節。請產出最終 Markdown 筆記，結構固定為：
-# 標題（依內容自擬）
+/* ================= ZIP（不壓縮，音檔本身已是 Opus） ================= */
+const CRC = (() => { const t = new Uint32Array(256); for (let n=0;n<256;n++){ let c=n; for (let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u8){ let c = 0xFFFFFFFF; for (let i=0;i<u8.length;i++) c = CRC[(c^u8[i])&255] ^ (c>>>8); return (c^0xFFFFFFFF)>>>0; }
+async function makeZip(files){
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const d = new Date(), dt = (d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1), dd = ((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  for (const f of files) {
+    const data = typeof f.data === "string" ? enc.encode(f.data) : new Uint8Array(await f.data.arrayBuffer());
+    const name = enc.encode(f.name), crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true); lh.setUint16(10,dt,true); lh.setUint16(12,dd,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,data.length,true); lh.setUint32(22,data.length,true); lh.setUint16(26,name.length,true); lh.setUint16(28,0,true);
+    parts.push(lh, name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true); ch.setUint16(12,dt,true); ch.setUint16(14,dd,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,data.length,true); ch.setUint32(24,data.length,true); ch.setUint16(28,name.length,true); ch.setUint32(42,off,true);
+    cen.push(ch, name); off += 30 + name.length + data.length;
+  }
+  const cs = cen.reduce((s,x) => s + x.byteLength, 0), end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true); end.setUint32(12,cs,true); end.setUint32(16,off,true);
+  return new Blob([...parts, ...cen, end], {type:"application/zip"});
+}
+async function readZip(blob){
+  const buf = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let e = buf.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error("不是有效的 ZIP 檔");
+  const n = dv.getUint16(e+10, true); let p = dv.getUint32(e+16, true); const dec = new TextDecoder(), out = {};
+  for (let i=0;i<n;i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("ZIP 目錄損壞");
+    const method = dv.getUint16(p+10,true), csize = dv.getUint32(p+20,true), nl = dv.getUint16(p+28,true), xl = dv.getUint16(p+30,true), cl = dv.getUint16(p+32,true), lo = dv.getUint32(p+42,true);
+    const name = dec.decode(buf.subarray(p+46, p+46+nl));
+    const start = lo + 30 + dv.getUint16(lo+26,true) + dv.getUint16(lo+28,true);
+    let data = buf.subarray(start, start + csize);
+    if (method === 8) data = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+    else if (method !== 0) throw new Error("不支援的 ZIP 壓縮方式");
+    out[name] = data; p += 46 + nl + xl + cl;
+  }
+  return out;
+}
+function segReport(){
+  return sorted().map(g => `#${g.seq}  ${new Date(g.at).toLocaleString("zh-TW",{hour12:false})}  ${g.dur?Number(g.dur).toFixed(1)+"s":""}  ${STAT[g.status]?.[0]||g.status}${g.model?"  "+MNAME(g.model):""}${g.reviewed?"  已確認":""}${g.flags.length?"\n警示："+g.flags.join("、"):""}${openIssues(g).length?"\n待確認："+openIssues(g).map(i=>i.type+"「"+i.quote+"」").join("；"):""}\n校正：${g.text||""}\n原始：${g.raw||""}\n`).join("\n");
+}
+async function exportZip(){
+  if (!cur) return;
+  toast("打包中…");
+  const pad = n => String(n).padStart(4, "0"), files = [], list = sorted();
+  const segsMeta = list.map(g => { const {blob, _v, ...r} = g; r.audioFile = blob ? `audio/${pad(g.seq)}.${g.ext||extOf(blob.type)||"webm"}` : null; return r; });
+  const srcs = await bySid("sources", cur.id);
+  const srcMeta = srcs.map(s => ({id:s.id, name:s.name, type:s.type, file:`sources/${s.id}.${(s.name.split(".").pop()||"bin").toLowerCase()}`}));
+  files.push({name:"session.json", data:JSON.stringify({format:"groq-dictation", version:2, exported:new Date().toISOString(), session:cur, segments:segsMeta, sources:srcMeta}, null, 1)});
+  files.push({name:"合併稿.txt", data:mergedText()});
+  files.push({name:"逐段校對.txt", data:segReport()});
+  if (cur.organized) files.push({name:"整理稿.md", data:cur.organized});
+  list.forEach((g, i) => { if (g.blob) files.push({name:segsMeta[i].audioFile, data:g.blob}); });
+  srcs.forEach((s, i) => files.push({name:srcMeta[i].file, data:s.blob}));
+  try { const z = await makeZip(files); download(fname("zip"), z); toast("已匯出 " + MB(z.size)); LS.set("lastExport_"+cur.id, Date.now()); banner("backup"); }
+  catch(e){ toast("匯出失敗：" + e.message); }
+}
+async function importZip(file){
+  const z = await readZip(file), dec = new TextDecoder();
+  if (!z["session.json"]) throw new Error("找不到 session.json，這不是本工具匯出的 ZIP");
+  const m = JSON.parse(dec.decode(z["session.json"]));
+  if (m.format !== "groq-dictation") throw new Error("格式不符");
+  const sid = "s" + Date.now();
+  const s = {...m.session, id:sid, name:(m.session.name||"匯入") + "（匯入）", created:Date.now()};
+  await put("sessions", s);
+  const srcMap = {};
+  for (const src of m.sources || []) {
+    const d = z[src.file]; if (!d) continue;
+    const nid = "src" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); srcMap[src.id] = nid;
+    await put("sources", {id:nid, sid, name:src.name, type:src.type, blob:new Blob([d], {type:src.type || mimeOf(src.name)})});
+  }
+  for (const r of m.segments || []) {
+    const g = normalize({...r, sid, id:sid + ":" + String(r.seq).padStart(5,"0")});
+    g.blob = r.audioFile && z[r.audioFile] ? new Blob([z[r.audioFile]], {type:mimeOf(r.audioFile)}) : null;
+    g.srcId = r.srcId ? (srcMap[r.srcId] || null) : null;
+    delete g.audioFile;
+    if (g.status==="transcribing") g.status = "queued"; if (g.status==="fixing") g.status = "transcribed";
+    await put("segs", g);
+  }
+  sessions.unshift(s); await switchSession(sid);
+  toast(`已匯入 ${(m.segments||[]).length} 段`); storageInfo();
+}
+$("#zipOut").onclick = exportZip; $("#zipOut2").onclick = exportZip;
+$("#zipIn").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (rec.on) return toast("請先停止錄音"); try { await importZip(f); } catch(err){ toast("匯入失敗：" + err.message); } };
+
+/* ================= 儲存空間 ================= */
+async function storageInfo(){
+  try {
+    const e = await navigator.storage?.estimate?.(); const p = await navigator.storage?.persisted?.();
+    $("#stInfo").textContent = (e ? `已用 ${MB(e.usage||0)}，瀏覽器允許約 ${MB(e.quota||0)}。` : "") + (p ? "已設為永久保存。" : "尚未永久保存：空間不足時瀏覽器可能清除資料。");
+    $("#persistBtn").hidden = !!p;
+  } catch { $("#stInfo").textContent = "無法讀取儲存空間資訊。"; }
+}
+$("#persistBtn").onclick = async () => { let ok = false; try { ok = await navigator.storage?.persist?.(); } catch {} toast(ok ? "已設為永久保存" : "瀏覽器沒有同意。請把本頁加入主畫面或書籤後再試。"); storageInfo(); };
+function delAudioHandler(){
+  const n = [...segs.values()].filter(g => g.blob && g.reviewed).length;
+  if (!n) return toast("沒有已確認且含音檔的段落");
+  $("#delAudioWrap").innerHTML = `<span class="confirm">刪除 ${n} 段已確認段落的音檔？刪除後無法重辨識。建議先匯出 ZIP。<button class="danger" id="yesDA" type="button">確定刪除</button><button id="noDA" type="button">取消</button></span>`;
+  $("#noDA").onclick = resetDA;
+  $("#yesDA").onclick = async () => { for (const g of segs.values()) if (g.blob && g.reviewed) { g.blob = null; touch(g); await saveSeg(g, true); } resetDA(); render(); storageInfo(); toast(`已刪除 ${n} 段音檔`); };
+}
+function resetDA(){ $("#delAudioWrap").innerHTML = '<button id="delAudio" class="danger" type="button">刪除已確認段落的音檔</button>'; $("#delAudio").onclick = delAudioHandler; }
+$("#delAudio").onclick = delAudioHandler;
+
+/* ================= 整理全文 ================= */
+const ORG_PART = `你是筆記整理者。輸入是一段語音逐字稿（已初步校對），每段開頭有段號如 [#12]，部分段落附有〔系統警示〕。
+請把這一部分整理成筆記小節，嚴格依照以下格式輸出：
+
+### 小標
+通順的段落或條列，保留所有具體資訊（數字、名稱、例子、步驟、條件、結論），刪掉重複與口語贅詞。
+（來源：#3–#7）
+
+（依主題分成數個 ### 小節，順序依原文）
+
+@@要點
+- 這部分最重要的 2–4 個重點，每條一句
+
+@@待確認
+- [#段號] 類型｜原文片段｜判斷理由｜建議：人工確認／重新辨識／刪除
+
+規則：
+1. 遇到語意不通、前後矛盾、疑似幻聽、疑似同音錯字、數字或專有名詞存疑的地方，不要自行猜測或硬改通順。在小節內文以〔?原文片段〕標註，並列入 @@待確認。
+2. 疑似幻聽的判斷：與上下文主題無關的句子、影片片尾套語（訂閱、按讚、字幕提供、謝謝觀看）、重複循環、不像說話者會說的內容。疑似幻聽且與主題無關的句子不要寫進小節內文。
+3. 類型只能用：語意不通、疑似幻聽、疑似錯字、數字或名詞存疑。建議只能用：人工確認、重新辨識、刪除。聽不清楚、懷疑辨識錯誤時建議「重新辨識」。
+4. 附有〔系統警示〕的段落要特別檢查。
+5. 不可杜撰原文沒有的資訊。使用台灣正體中文與全形標點。沒有待確認項目時，@@待確認 下寫「- 無」。`;
+const ORG_SUM = `你是筆記編輯。輸入是一份長筆記各部分的「要點」與小節標題，依時間順序排列。
+請只輸出以下 Markdown，不要加其他內容：
+
+# 標題（依內容自擬，20 字內）
+
 ## 摘要
-3–6 個重點條列。
-## 內容整理
-把小節依邏輯排序、合併重複主題，改用「### 小標」；保留所有具體資訊，不可刪減實質內容，不可杜撰。
-## 重點整理與待辦
-條列關鍵結論、規則、行動事項（沒有就寫「無」）。
-## 名詞
-文中出現的專有名詞與簡短說明（沒有就省略本節）。
-使用台灣正體中文與全形標點。只輸出筆記本身。`;
-async function chat(model, sys, user, effort){
-  for (let i=0;;i++) {
-    try { const j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
-      model, temperature:0.3, reasoning_effort:effort, max_completion_tokens:8192, messages:[{role:"system",content:sys},{role:"user",content:user}]})});
-      return (j.choices?.[0]?.message?.content||"").trim();
-    } catch(e){ if (i>=5 || e.status===401 || e.status===400) throw e; $("#orgMsg").textContent = "等待額度後重試…"; await sleep(e.retryAfter || 3000*2**i); }
+- 3–6 條，涵蓋全文最重要的內容
+
+## 重點與待辦
+- 關鍵結論、規則、行動事項；沒有就寫「- 無」
+
+使用台灣正體中文與全形標點，不可杜撰。`;
+async function chat(model, sys, user, maxTok, effort){
+  for (let i = 0;; i++) {
+    try {
+      const j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+        model, temperature:0.3, reasoning_effort:effort, max_completion_tokens:maxTok, messages:[{role:"system",content:sys},{role:"user",content:user}]})});
+      const c = j.choices?.[0];
+      if (c?.finish_reason === "length") $("#orgMsg").textContent = "有一部分輸出被截斷，建議改用開發者方案或縮短內容";
+      return (c?.message?.content || "").trim();
+    } catch(e) {
+      if (i >= 6 || e.status===401 || e.status===400 || e.status===413) throw e;
+      const w = e.status===429 ? (e.wait || 8000*2**i) : 3000*2**i;
+      $("#orgMsg").textContent = `${e.status===429?"等待 Groq 額度":"連線問題"}，${fmtWait(w)} 後重試…`;
+      await sleep(w);
+    }
   }
 }
+function orgLines(){
+  return sorted().filter(g => g.status==="done" && g.text).map(g => {
+    const f = [];
+    if (!g.reviewed) { g.flags.filter(x => !/一致/.test(x)).forEach(x => f.push(x)); openIssues(g).forEach(i => f.push(i.type + "「" + i.quote + "」")); }
+    return `[#${g.seq}]${f.length ? "〔系統警示：" + f.join("；") + "〕" : ""} ${g.text.trim()}`;
+  });
+}
+function splitPart(md){
+  const a = md.indexOf("@@要點"), b = md.indexOf("@@待確認");
+  const body = (a >= 0 ? md.slice(0, a) : b >= 0 ? md.slice(0, b) : md).trim();
+  const pts = a >= 0 ? md.slice(a + 4, b > a ? b : undefined).trim() : "";
+  const todo = b >= 0 ? md.slice(b + 5).trim() : "";
+  return {body, pts, todo};
+}
+function parseItems(text){
+  const out = [];
+  for (const line of String(text).split("\n")) {
+    const m = line.match(/^\s*[-*]\s*\[?#(\d+)\]?\s*(.*)$/); if (!m) continue;
+    const p = m[2].split(/[｜|]/).map(s => s.trim());
+    out.push({seq:+m[1], type:p[0]||"", quote:p[1]||"", reason:p[2]||"", suggest:(p[3]||"").replace(/^建議[:：]\s*/, "")});
+  }
+  return out;
+}
 $("#orgBtn").onclick = async () => {
-  readForm();
-  const text = mergedText().join("\n\n");
-  if (!text) return toast("還沒有完成的段落");
-  const pending = [...segs.values()].filter(g=>!["done","skip","err_tx","err_fx"].includes(g.status)).length;
-  const btn = $("#orgBtn"); btn.disabled = true;
+  readForm(); if (!S.key) return toast("請先設定 API key");
+  const lines = orgLines(); if (!lines.length) return toast("還沒有完成的段落");
+  const pending = [...segs.values()].filter(g => !/done|skip|err_tx|err_fx/.test(g.status)).length;
+  const T = TIER(), btn = $("#orgBtn"); btn.disabled = true;
   try {
-    const CH = 3500, chunks = []; let b = "";
-    for (const p of text.split("\n\n")) { if (b && (b.length + p.length) > CH) { chunks.push(b); b = ""; } b += (b?"\n\n":"") + p; }
+    const chunks = []; let b = "";
+    for (const l of lines) { if (b && b.length + l.length > T.org) { chunks.push(b); b = ""; } b += (b ? "\n" : "") + l; }
     if (b) chunks.push(b);
     const parts = [];
-    for (let i=0;i<chunks.length;i++) { $("#orgMsg").textContent = `整理第 ${i+1}/${chunks.length} 部分…`; parts.push(await chat(S.orgModel, ORG_PART, chunks[i], "medium")); }
-    $("#orgMsg").textContent = "合併成最終筆記…";
-    const final = await chat(S.orgModel, ORG_FINAL, parts.join("\n\n"), "medium");
-    cur.organized = final; await put("sessions", cur);
-    $("#orgDoc").innerHTML = md(final);
-    $("#orgMsg").textContent = `完成（${new Date().toLocaleTimeString("zh-TW",{hour12:false})}）` + (pending ? `，另有 ${pending} 段仍在處理，完成後可再整理一次` : "");
-  } catch(e){ $("#orgMsg").textContent = "整理失敗：" + e.message; }
+    for (let i = 0; i < chunks.length; i++) {
+      $("#orgMsg").textContent = `整理第 ${i+1}/${chunks.length} 部分…`;
+      parts.push(splitPart(await chat(S.orgModel, ORG_PART, chunks[i], T.orgTok, T.orgEffort)));
+    }
+    $("#orgMsg").textContent = "產生標題與摘要…";
+    let sumIn = parts.map((p, i) => `【第 ${i+1} 部分】\n小節：${(p.body.match(/^###\s+.+$/gm)||[]).map(s=>s.replace(/^###\s+/,"")).join("、")}\n${p.pts}`).join("\n\n");
+    if (sumIn.length > T.org * 1.5) sumIn = sumIn.slice(0, T.org * 1.5);
+    const head = await chat(S.orgModel, ORG_SUM, sumIn, Math.min(T.orgTok, 2000), T.orgEffort);
+    const items = parts.flatMap(p => parseItems(p.todo));
+    const todoMd = items.length ? items.map(x => `- [#${x.seq}] ${x.type}｜${x.quote}｜${x.reason}｜建議：${x.suggest}`).join("\n") : "- 無";
+    const final = `${head.trim()}\n\n## 內容整理\n\n${parts.map(p => p.body).join("\n\n")}\n\n## 待確認清單\n\n${todoMd}\n`;
+    cur.organized = final; cur.orgItems = items; cur.orgAt = Date.now();
+    segs.forEach(g => { if (g.orgNote) { g.orgNote = ""; computeRisk(g); touch(g); saveSeg(g); } });
+    for (const x of items) { const g = segBySeq(x.seq); if (!g) continue; g.orgNote = [x.type, x.quote && "「"+x.quote+"」", x.reason, x.suggest && "建議："+x.suggest].filter(Boolean).join("　"); g.reviewed = false; touch(g); saveSeg(g, true); }
+    await put("sessions", cur); drawOrg(); render();
+    $("#orgMsg").textContent = `完成（${clock(Date.now())}），待確認 ${items.length} 項` + (pending ? `；另有 ${pending} 段仍在處理，完成後可再整理一次` : "");
+  } catch(e) { $("#orgMsg").textContent = "整理失敗：" + e.message; }
   finally { btn.disabled = false; }
 };
+function drawOrg(){
+  if (!cur) return;
+  $("#orgDoc").innerHTML = cur.organized ? md(cur.organized) : '<p class="empty">按「整理全文」把已完成的段落整理成筆記：標題、摘要、分節內容、重點與待辦，以及「待確認清單」（語意不通、疑似幻聽、建議重新辨識的地方都會附段號）。</p>';
+  const it = cur.orgItems || [];
+  const re = [...new Set(it.filter(x => /重新辨識/.test(x.suggest)).map(x => x.seq))].filter(s => { const g = segBySeq(s); return g && hasAudio(g); });
+  $("#orgItems").innerHTML = it.length ? `<div class="card items"><div class="row tight"><strong>待確認 ${it.length} 項</strong><span class="sp"></span>${re.length ? `<button type="button" id="reAll">建議重新辨識的 ${re.length} 段改用 large-v3</button>` : ""}</div>${it.map(x => `<div class="item"><a class="ref" href="#" data-seq="${x.seq}">#${x.seq}</a><span class="chip">${esc(x.type)}</span><span class="q">${esc(x.quote)}</span><span class="note">${esc(x.reason)}</span><span class="note">建議：${esc(x.suggest)}</span></div>`).join("")}</div>` : "";
+  const b = $("#reAll"); if (b) b.onclick = () => { re.forEach(s => { const g = segBySeq(s); if (g) redo(g, V3); }); toast(`已排入 ${re.length} 段重辨識，完成後請再整理一次`); };
+}
 function md(src){
-  const lines = esc(src).split("\n"); let out = "", list = null;
-  const inline = s => s.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  const lines = String(src).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])).split("\n"); let out = "", list = null;
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/〔\?([^〕]*)〕/g, '<mark title="待確認">〔?$1〕</mark>')
+    .replace(/\[?#(\d+)\]?/g, '<a class="ref" href="#" data-seq="$1">#$1</a>');
   const close = () => { if (list) { out += `</${list}>`; list = null; } };
   for (const l of lines) {
     let m;
-    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { close(); const n=Math.min(m[1].length,3); out += `<h${n}>${inline(m[2])}</h${n}>`; }
-    else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { if (list!=="ul") { close(); out += "<ul>"; list="ul"; } out += `<li>${inline(m[1])}</li>`; }
-    else if ((m = l.match(/^\s*\d+[.)、]\s*(.*)/))) { if (list!=="ol") { close(); out += "<ol>"; list="ol"; } out += `<li>${inline(m[1])}</li>`; }
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { close(); const n = Math.min(m[1].length, 3); out += `<h${n}>${inline(m[2])}</h${n}>`; }
+    else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { close(); out += "<ul>"; list = "ul"; } out += `<li>${inline(m[1])}</li>`; }
+    else if ((m = l.match(/^\s*\d+[.)、]\s*(.*)/))) { if (list !== "ol") { close(); out += "<ol>"; list = "ol"; } out += `<li>${inline(m[1])}</li>`; }
     else if (!l.trim()) close();
     else { close(); out += `<p>${inline(l)}</p>`; }
   }
   close(); return out;
 }
+$("#p-org").addEventListener("click", e => {
+  const a = e.target.closest("a.ref"); if (!a) return; e.preventDefault();
+  const g = segBySeq(+a.dataset.seq); if (g) openReview(g.id); else toast("找不到第 " + a.dataset.seq + " 段");
+});
 
-/* ---------- 啟動 ---------- */
-window.addEventListener("beforeunload", e => { if (rec.on || busy.tx.size || busy.fx.size) { e.preventDefault(); e.returnValue = ""; } });
-openDB().then(d => { db = d; return loadSessions(); }).catch(e => toast("無法開啟本機儲存：" + e.message));
+/* ================= 啟動 ================= */
+window.addEventListener("beforeunload", e => { if (rec.on || lanes.tx.busy.size || lanes.fx.busy.size) { e.preventDefault(); e.returnValue = ""; } });
+openDB().then(d => { db = d; return loadSessions(); }).then(() => {
+  storageInfo();
+  const last = cur && LS.get("lastExport_"+cur.id, 0), n = segs.size;
+  if (n >= 30 && Date.now() - (last||0) > 3*86400000) banner("backup", `這個工作階段有 ${n} 段，超過 3 天沒有備份。建議到「設定與保存」匯出 ZIP。`);
+}).catch(e => toast("無法開啟本機儲存：" + e.message));
 </script>
 </body>
 </html>

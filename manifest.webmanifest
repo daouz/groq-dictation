@@ -1,0 +1,11 @@
+{
+  "name": "Groq 連續聽寫",
+  "short_name": "連續聽寫",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f4",
+  "theme_color": "#0f7a5a",
+  "lang": "zh-Hant-TW",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
