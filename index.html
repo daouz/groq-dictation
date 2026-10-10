@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Groq 連續聽寫</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 版面：頂部控制列固定，下方為分頁（逐段／合併稿／整理稿），設定收在可展開面板 */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --fg:#17201c; --muted:#5d6b64; --line:#d9e0dc;
+  --accent:#0f7a5a; --accent-fg:#ffffff; --rec:#d23b3b; --warn:#b7791f; --err:#c0392b; --soft:#e7efeb;
+  --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111614; --panel:#1a211e; --fg:#e4ebe7; --muted:#93a39b; --line:#2c3632;
+  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111614; --panel:#1a211e; --fg:#e4ebe7; --muted:#93a39b; --line:#2c3632;
+  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.7 var(--font);padding-inline:16px;padding-block:0 60px}
+.wrap{max-width:880px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-block:14px 8px}
+h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.02em}
+h1 small{font:500 12px var(--mono);color:var(--muted);margin-left:6px}
+.sp{flex:1}
+button,select,input,textarea{font:inherit;color:inherit}
+button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[contenteditable]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button.danger{color:var(--err)}
+button:disabled{opacity:.45;cursor:default}
+input[type=text],input[type=password],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:100%}
+textarea{resize:vertical;min-height:60px}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+#settings{display:grid;gap:12px;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.note{font-size:12px;color:var(--muted)}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px}
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+#recBtn{width:56px;height:56px;border-radius:50%;border:none;background:var(--rec);color:#fff;font-weight:700;font-size:13px;flex:none}
+#recBtn.on{animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 55%,transparent)}50%{box-shadow:0 0 0 10px transparent}}
+@media (prefers-reduced-motion:reduce){#recBtn.on{animation:none}}
+.timer{font:600 20px var(--mono);font-variant-numeric:tabular-nums;min-width:86px}
+.meter{flex:1;min-width:120px;height:10px;background:var(--soft);border-radius:6px;position:relative;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0;transition:width .06s}
+.meter b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn)}
+.segprog{height:3px;background:var(--soft);border-radius:2px;margin-top:6px;overflow:hidden}
+.segprog i{display:block;height:100%;width:0;background:var(--muted)}
+.stats{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:12px}
+.chip{font:500 12px var(--mono);padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.q{color:var(--muted)} .chip.t{color:var(--warn);border-color:var(--warn)} .chip.d{color:var(--accent);border-color:var(--accent)} .chip.e{color:var(--err);border-color:var(--err)}
+.sess{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.sess select{width:auto;min-width:180px;flex:1}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:10px}
+.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted)}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:700}
+.pane{padding-top:12px}
+.seg{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.seg .n{font:600 12px var(--mono);color:var(--muted);text-align:right;min-width:44px;font-variant-numeric:tabular-nums}
+.seg .n span{display:block;font-weight:400}
+.seg .body{min-width:0}
+.seg .txt{white-space:pre-wrap;word-break:break-word;border-radius:6px;padding:2px 4px;margin:-2px -4px}
+.seg .txt[contenteditable="true"]:hover{background:var(--soft)}
+.seg .raw{font-size:13px;color:var(--muted);white-space:pre-wrap;margin-top:4px;border-left:2px solid var(--line);padding-left:8px}
+.seg .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
+.seg .meta button{padding:1px 8px;font-size:12px}
+.seg.skip .txt{color:var(--muted);font-style:italic}
+.empty{color:var(--muted);text-align:center;padding:40px 10px}
+.doc{white-space:pre-wrap;word-break:break-word;line-height:1.9}
+.doc p{margin:0 0 1em}
+.md h1{font-size:22px;margin:.2em 0 .6em}
+.md h2{font-size:18px;margin:1.4em 0 .5em;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.md h3{font-size:16px;margin:1.2em 0 .4em}
+.md ul,.md ol{padding-left:1.4em;margin:.4em 0 1em}
+.md p{margin:0 0 .9em}
+.md{line-height:1.85;max-width:68ch}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.on{opacity:1}
+.confirm{display:inline-flex;gap:6px;align-items:center;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Groq 連續聽寫<small>whisper turbo → gpt-oss</small></h1>
+  <span class="sp"></span>
+  <button id="setBtn" type="button">設定</button>
+</header>
+
+<section id="settings" class="card" hidden>
+  <label class="f">Groq API key（只存在這台裝置的瀏覽器）
+    <input id="key" type="password" placeholder="gsk_..." autocomplete="off">
+  </label>
+  <div class="grid2">
+    <label class="f">修正模型
+      <select id="fixModel">
+        <option value="openai/gpt-oss-120b">gpt-oss-120b（較準）</option>
+        <option value="openai/gpt-oss-20b">gpt-oss-20b（較快）</option>
+      </select>
+    </label>
+    <label class="f">整理模型
+      <select id="orgModel">
+        <option value="openai/gpt-oss-120b">gpt-oss-120b</option>
+        <option value="openai/gpt-oss-20b">gpt-oss-20b</option>
+      </select>
+    </label>
+    <label class="f">分段方式
+      <select id="mode">
+        <option value="auto">停頓自動切段</option>
+        <option value="fixed">固定秒數</option>
+      </select>
+    </label>
+    <label class="f">最短／最長秒數
+      <span style="display:flex;gap:6px"><input id="minSec" type="number" min="3" max="60" value="8"><input id="maxSec" type="number" min="10" max="300" value="40"></span>
+    </label>
+    <label class="f">靜音門檻（黃線）<input id="thr" type="range" min="0.002" max="0.08" step="0.001" value="0.015"></label>
+    <label class="f">同時轉錄／修正數
+      <span style="display:flex;gap:6px"><input id="ctx" type="number" min="1" max="6" value="3"><input id="cfx" type="number" min="1" max="6" value="2"></span>
+    </label>
+  </div>
+  <label class="f">專有名詞／詞彙表（逗號或換行分隔，會提示給轉錄與修正）
+    <textarea id="vocab" placeholder="例：Groq、價格行為、停損、斐波那契"></textarea>
+  </label>
+  <div class="row" style="margin:0">
+    <button id="saveSet" class="primary" type="button">儲存設定</button>
+    <button id="testKey" type="button">測試金鑰</button>
+    <button id="clearAudio" type="button">刪除已完成段落的音檔</button>
+    <span id="setMsg" class="note"></span>
+  </div>
+  <p class="note" style="margin:0">錄音期間請保持此分頁在前景、螢幕不要關閉（手機鎖屏會中斷麥克風）。音檔與文字存在瀏覽器 IndexedDB，重新整理後未完成的工作會自動接續。</p>
+</section>
+
+<div class="bar">
+  <div class="ctrl">
+    <button id="recBtn" type="button" aria-label="開始錄音">錄音</button>
+    <div class="timer" id="timer">00:00:00</div>
+    <div style="flex:1;min-width:140px">
+      <div class="meter"><i id="lvl"></i><b id="thrMark"></b></div>
+      <div class="segprog"><i id="segp"></i></div>
+    </div>
+    <button id="cutBtn" type="button" disabled>立即切段</button>
+    <label class="note" style="cursor:pointer"><input id="file" type="file" accept="audio/*,video/*" multiple hidden><u>上傳音檔</u></label>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="sess">
+    <select id="sessSel" aria-label="選擇工作階段"></select>
+    <button id="newSess" type="button">新工作階段</button>
+    <button id="renSess" type="button">改名</button>
+    <span id="delWrap"><button id="delSess" class="danger" type="button">刪除</button></span>
+  </div>
+  <div class="tabs" role="tablist">
+    <button data-tab="segs" class="on" type="button">逐段</button>
+    <button data-tab="merged" type="button">合併稿</button>
+    <button data-tab="org" type="button">整理稿</button>
+  </div>
+</div>
+
+<section id="p-segs" class="pane"></section>
+<section id="p-merged" class="pane" hidden>
+  <div class="row">
+    <button id="copyMerged" type="button">複製</button>
+    <button id="dlMerged" type="button">下載 .txt</button>
+    <span class="note">已完成段落依順序接成段落；修改請在「逐段」直接點文字編輯。</span>
+  </div>
+  <div id="mergedDoc" class="doc"></div>
+</section>
+<section id="p-org" class="pane" hidden>
+  <div class="row">
+    <button id="orgBtn" class="primary" type="button">整理全文</button>
+    <button id="copyOrg" type="button">複製 Markdown</button>
+    <button id="dlOrg" type="button">下載 .md</button>
+    <button id="dlJson" type="button">備份 JSON</button>
+    <span id="orgMsg" class="note"></span>
+  </div>
+  <div id="orgDoc" class="md"></div>
+</section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ---------- 小工具 ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fmtT = s => { s = Math.max(0, Math.floor(s)); return [s/3600|0, (s%3600)/60|0, s%60].map(v => String(v).padStart(2,"0")).join(":"); };
+const clock = ts => new Date(ts).toLocaleTimeString("zh-TW", {hour12:false});
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("on"),2200); }
+const LS = { get(k,d){ try{ const v=localStorage.getItem("gd_"+k); return v==null?d:JSON.parse(v);}catch{return d} }, set(k,v){ try{localStorage.setItem("gd_"+k,JSON.stringify(v))}catch{} } };
+
+/* ---------- 設定 ---------- */
+const S = Object.assign({key:"", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b", mode:"auto", minSec:8, maxSec:40, thr:0.015, ctx:3, cfx:2, vocab:""}, LS.get("settings", {}));
+const fields = ["key","fixModel","orgModel","mode","minSec","maxSec","thr","ctx","cfx","vocab"];
+function loadForm(){ fields.forEach(f => $("#"+f).value = S[f]); markThr(); }
+function readForm(){
+  fields.forEach(f => { const el=$("#"+f); S[f] = el.type==="number"||el.type==="range" ? Number(el.value) : el.value.trim(); });
+  S.minSec = Math.max(3, S.minSec); S.maxSec = Math.max(S.minSec+2, S.maxSec);
+  LS.set("settings", S);
+}
+function markThr(){ $("#thrMark").style.left = Math.min(100, Math.sqrt(Number($("#thr").value)/0.25)*100) + "%"; }
+$("#thr").addEventListener("input", markThr);
+$("#setBtn").onclick = () => { $("#settings").hidden = !$("#settings").hidden; };
+$("#saveSet").onclick = () => { readForm(); $("#setMsg").textContent = "已儲存"; pump(); };
+$("#testKey").onclick = async () => {
+  readForm(); $("#setMsg").textContent = "測試中…";
+  try { const r = await fetch("https://api.groq.com/openai/v1/models", {headers:{Authorization:"Bearer "+S.key}});
+    $("#setMsg").textContent = r.ok ? "金鑰可用" : "金鑰無效（HTTP "+r.status+"）";
+  } catch(e){ $("#setMsg").textContent = "連線失敗：" + e.message; }
+};
+loadForm();
+if (!S.key) $("#settings").hidden = false;
+
+/* ---------- IndexedDB ---------- */
+let db;
+function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",1);
+  r.onupgradeneeded=()=>{ const d=r.result; d.createObjectStore("sessions",{keyPath:"id"}); const s=d.createObjectStore("segs",{keyPath:"id"}); s.createIndex("sid","sid"); };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+function tx(store, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(store,mode); const out=fn(t.objectStore(store)); t.oncomplete=()=>res(out&&out.result!==undefined?out.result:out); t.onerror=()=>rej(t.error); }); }
+const put = (store,v) => tx(store,"readwrite",s=>s.put(v));
+const getAll = store => tx(store,"readonly",s=>s.getAll());
+const segsOf = sid => tx("segs","readonly",s=>s.index("sid").getAll(sid));
+const delKey = (store,k) => tx(store,"readwrite",s=>s.delete(k));
+
+/* ---------- 狀態 ---------- */
+let sessions = [], cur = null;          // 目前工作階段
+const segs = new Map();                 // id -> seg（只放目前工作階段）
+let saveTimers = {};
+function saveSeg(seg, now){ clearTimeout(saveTimers[seg.id]); const go=()=>put("segs",seg).catch(e=>console.error(e)); if(now) return go(); saveTimers[seg.id]=setTimeout(go,300); }
+const sorted = () => [...segs.values()].sort((a,b)=>a.seq-b.seq);
+
+async function loadSessions(){
+  sessions = (await getAll("sessions")).sort((a,b)=>b.created-a.created);
+  if (!sessions.length) await newSession();
+  const want = LS.get("cur", null);
+  await switchSession(sessions.find(s=>s.id===want) ? want : sessions[0].id);
+}
+async function newSession(){
+  const d = new Date();
+  const s = {id:"s"+Date.now(), name:d.toLocaleDateString("zh-TW")+" "+d.toLocaleTimeString("zh-TW",{hour12:false,hour:"2-digit",minute:"2-digit"}), created:Date.now(), organized:""};
+  await put("sessions", s); sessions.unshift(s); return s;
+}
+async function switchSession(id){
+  if (rec.on) { toast("錄音中無法切換工作階段"); renderSessSel(); return; }
+  cur = sessions.find(s=>s.id===id); LS.set("cur", id);
+  segs.clear(); (await segsOf(id)).forEach(g => { if (g.status==="transcribing") g.status="queued"; if (g.status==="fixing") g.status="transcribed"; g.nextAt=0; segs.set(g.id,g); });
+  renderSessSel(); render(true); $("#orgDoc").innerHTML = cur.organized ? md(cur.organized) : '<p class="empty">按「整理全文」把已完成的段落整理成有標題、摘要與分節的筆記。</p>';
+  pump();
+}
+function renderSessSel(){ $("#sessSel").innerHTML = sessions.map(s=>`<option value="${s.id}" ${cur&&s.id===cur.id?"selected":""}>${esc(s.name)}</option>`).join(""); }
+$("#sessSel").onchange = e => switchSession(e.target.value);
+$("#newSess").onclick = async () => { if(rec.on) return toast("請先停止錄音"); const s = await newSession(); await switchSession(s.id); };
+$("#renSess").onclick = () => {
+  const sel=$("#sessSel"); const inp=document.createElement("input"); inp.type="text"; inp.id="renInput"; inp.value=cur.name; inp.style.flex="1";
+  sel.replaceWith(inp); inp.focus(); inp.select();
+  const done = async () => { cur.name = inp.value.trim()||cur.name; await put("sessions",cur); inp.replaceWith(sel); renderSessSel(); };
+  inp.onkeydown = e => { if(e.key==="Enter") done(); if(e.key==="Escape"){ inp.replaceWith(sel); } }; inp.onblur = done;
+};
+function delHandler(){
+  if (rec.on) return toast("請先停止錄音");
+  $("#delWrap").innerHTML = `<span class="confirm">確定刪除「${esc(cur.name)}」？<button class="danger" id="yesDel" type="button">刪除</button><button id="noDel" type="button">取消</button></span>`;
+  $("#noDel").onclick = resetDel;
+  $("#yesDel").onclick = async () => { for (const g of await segsOf(cur.id)) await delKey("segs", g.id); await delKey("sessions", cur.id);
+    sessions = sessions.filter(s=>s.id!==cur.id); if(!sessions.length) await newSession(); resetDel(); await switchSession(sessions[0].id); };
+}
+function resetDel(){ $("#delWrap").innerHTML = '<button id="delSess" class="danger" type="button">刪除</button>'; $("#delSess").onclick = delHandler; }
+$("#delSess").onclick = delHandler;
+
+/* ---------- 新增段落 ---------- */
+function nextSeq(){ let m=0; segs.forEach(g=>{ if(g.seq>m) m=g.seq; }); return m+1; }
+async function addSegment(blob, meta){
+  const seq = nextSeq();
+  const seg = {id:cur.id+":"+String(seq).padStart(5,"0"), sid:cur.id, seq, at:meta.at||Date.now(), dur:meta.dur||0, offset:meta.offset??null,
+    blob, ext:meta.ext||"webm", status:"queued", raw:"", text:"", edited:false, tries:0, nextAt:0, err:"", src:meta.src||"mic"};
+  if (meta.silent) { seg.status="skip"; seg.text="（靜音，略過）"; seg.blob=null; }
+  segs.set(seg.id, seg); await saveSeg(seg, true); render(); pump();
+}
+
+/* ---------- 錄音與自動切段 ---------- */
+const rec = {on:false, stream:null, ctx:null, an:null, buf:null, mr:null, chunks:[], segStart:0, lastVoice:0, hadVoice:false, peak:0, t0:0, iv:null, mime:"", ext:"webm", wake:null};
+function pickMime(){
+  for (const [m,e] of [["audio/webm;codecs=opus","webm"],["audio/webm","webm"],["audio/mp4","m4a"],["audio/ogg;codecs=opus","ogg"]])
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return [m,e];
+  return ["", "webm"];
+}
+function startRecorder(){
+  const opts = rec.mime ? {mimeType:rec.mime, audioBitsPerSecond:32000} : {};
+  const mr = new MediaRecorder(rec.stream, opts); const chunks = [];
+  const meta = {at:Date.now(), offset:(performance.now()-rec.t0)/1000};
+  mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = () => {
+    meta.dur = mr._dur; meta.ext = rec.ext; meta.silent = mr._silent;
+    const blob = new Blob(chunks, {type: rec.mime || chunks[0]?.type || "audio/webm"});
+    if (blob.size > 1000 || meta.silent) addSegment(blob, meta).catch(e=>toast("存檔失敗："+e.message));
+  };
+  mr.start(1000);
+  rec.mr = mr; rec.segStart = performance.now(); rec.lastVoice = rec.segStart; rec.hadVoice = false; rec.peak = 0;
+}
+function cut(){
+  if (!rec.mr) return;
+  const old = rec.mr; old._dur = (performance.now()-rec.segStart)/1000; old._silent = !rec.hadVoice;
+  if (rec.on) startRecorder(); else rec.mr = null;   // 先接上新的錄音器，再停舊的，避免漏字
+  try { old.stop(); } catch {}
+}
+async function startRec(){
+  readForm();
+  if (!S.key) { $("#settings").hidden=false; return toast("請先輸入 Groq API key"); }
+  try { rec.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true}}); }
+  catch(e){ return toast("無法使用麥克風：" + e.message); }
+  [rec.mime, rec.ext] = pickMime();
+  rec.ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const src = rec.ctx.createMediaStreamSource(rec.stream); rec.an = rec.ctx.createAnalyser(); rec.an.fftSize = 1024; src.connect(rec.an);
+  rec.buf = new Float32Array(rec.an.fftSize);
+  rec.on = true; rec.t0 = performance.now(); startRecorder();
+  rec.iv = setInterval(tick, 50);
+  try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {}
+  $("#recBtn").classList.add("on"); $("#recBtn").textContent="停止"; $("#cutBtn").disabled=false;
+}
+function stopRec(){
+  rec.on = false; clearInterval(rec.iv); cut();
+  rec.stream?.getTracks().forEach(t=>t.stop()); rec.ctx?.close().catch(()=>{});
+  try { rec.wake?.release(); } catch {}
+  $("#recBtn").classList.remove("on"); $("#recBtn").textContent="錄音"; $("#cutBtn").disabled=true; $("#lvl").style.width="0"; $("#segp").style.width="0";
+}
+function tick(){
+  rec.an.getFloatTimeDomainData(rec.buf);
+  let sum=0; for (let i=0;i<rec.buf.length;i++) sum+=rec.buf[i]*rec.buf[i];
+  const rms = Math.sqrt(sum/rec.buf.length), now = performance.now();
+  $("#lvl").style.width = Math.min(100, Math.sqrt(rms/0.25)*100) + "%";
+  if (rms > S.thr) { rec.lastVoice = now; rec.hadVoice = true; }
+  if (rms > rec.peak) rec.peak = rms;
+  const el = (now-rec.segStart)/1000;
+  $("#timer").textContent = fmtT((now-rec.t0)/1000);
+  $("#segp").style.width = Math.min(100, el/S.maxSec*100) + "%";
+  const quiet = now - rec.lastVoice;
+  if (el >= S.maxSec) return cut();
+  if (S.mode==="auto" && el >= S.minSec && rec.hadVoice && quiet >= 700) return cut();
+  if (S.mode==="fixed" && el >= S.minSec && el >= S.maxSec) return cut();
+}
+$("#recBtn").onclick = () => rec.on ? stopRec() : startRec();
+$("#cutBtn").onclick = () => cut();
+document.addEventListener("visibilitychange", async () => { if (rec.on && document.visibilityState==="visible") { try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {} } });
+
+/* 上傳音檔：每個檔案一段 */
+$("#file").onchange = async e => {
+  for (const f of e.target.files) {
+    if (f.size > 25*1024*1024) { toast(f.name+" 超過 25MB，請先切小"); continue; }
+    const ext = (f.name.split(".").pop()||"m4a").toLowerCase();
+    await addSegment(f, {at:Date.now(), ext, src:"file:"+f.name});
+  }
+  e.target.value = "";
+};
+
+/* ---------- Groq API ---------- */
+class ApiErr extends Error { constructor(m, status, retryAfter){ super(m); this.status=status; this.retryAfter=retryAfter; } }
+async function groq(path, init){
+  const r = await fetch("https://api.groq.com/openai/v1/"+path, {...init, headers:{Authorization:"Bearer "+S.key, ...(init.headers||{})}});
+  if (!r.ok) { let m = "HTTP "+r.status; try { const j = await r.json(); m = j.error?.message || m; } catch {}
+    const ra = Number(r.headers.get("retry-after")); throw new ApiErr(m, r.status, isFinite(ra)&&ra>0 ? ra*1000 : 0); }
+  return r.json();
+}
+const vocabList = () => S.vocab.split(/[,，、\n]/).map(s=>s.trim()).filter(Boolean);
+async function transcribe(seg){
+  const fd = new FormData();
+  fd.append("file", seg.blob, "seg-"+seg.seq+"."+seg.ext);
+  fd.append("model", "whisper-large-v3-turbo");
+  fd.append("language", "zh");
+  fd.append("temperature", "0");
+  fd.append("response_format", "json");
+  const v = vocabList();
+  fd.append("prompt", ("以下是台灣的中文錄音，使用繁體字。" + (v.length ? "可能出現：" + v.join("、") + "。" : "")).slice(0, 200));
+  const j = await groq("audio/transcriptions", {method:"POST", body:fd});
+  return (j.text||"").trim();
+}
+const HALLU = /(請不吝|點贊|點讚|訂閱|轉發|打賞|字幕由|字幕製作|明鏡與點點|感謝觀看|謝謝觀看|謝謝收看|Amara|中文字幕)/;
+function looksHallucinated(t){ const s=t.replace(/[\s，。！？、,.!?]/g,""); return !s || (s.length < 40 && HALLU.test(s)); }
+
+const FIX_SYS = `你是台灣正體中文的逐字稿校對員。輸入是語音辨識（Whisper）的一小段結果，可能有簡體字、同音錯字、缺標點、斷句錯誤。
+請輸出「這一段」校正後的文字，規則：
+1. 全部轉成台灣正體中文與台灣慣用詞（例：視頻→影片、質量→品質、軟件→軟體），英文專有名詞保留原文。
+2. 修正明顯的同音或近音錯字，讓語意通順；不確定的地方保留原樣，不要猜測補寫。
+3. 加上全形標點（，。、？！：「」），依語意斷句；意思轉換明顯處可換行分段。
+4. 刪除無意義的口頭贅字（嗯、呃、那個那個），但保留說話者的原意、語氣與所有具體內容、數字、例子。
+5. 不要摘要、不要評論、不要加標題，也不要重複「前文」。只輸出校正後的本段文字。`;
+async function fixText(seg){
+  const prev = sorted().filter(g => g.seq < seg.seq && g.status!=="skip").slice(-1)[0];
+  const ctxText = prev ? (prev.text || prev.raw).slice(-200) : "";
+  const v = vocabList();
+  const user = (ctxText ? "【前文，只供參考，不要輸出】\n"+ctxText+"\n\n" : "") + (v.length ? "【詞彙表】"+v.join("、")+"\n\n" : "") + "【本段原始轉錄】\n" + seg.raw;
+  const j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+    model:S.fixModel, temperature:0.2, reasoning_effort:"low", max_completion_tokens:2048,
+    messages:[{role:"system", content:FIX_SYS}, {role:"user", content:user}] })});
+  let out = (j.choices?.[0]?.message?.content || "").trim();
+  out = out.replace(/^(【?本段[^】\n]*】?|校正後[:：]?|修正後[:：]?)\s*/,"").replace(/^「([\s\S]*)」$/,"$1").trim();
+  if (!out) throw new ApiErr("模型沒有回傳文字", 0, 0);
+  return out;
+}
+
+/* ---------- 工作佇列（轉錄與修正分開並行，不互相阻塞） ---------- */
+const busy = {tx:new Set(), fx:new Set()};
+let wakeTimer = null;
+function pump(){
+  if (!S.key || !cur) return;
+  const now = Date.now(); let soonest = Infinity;
+  const list = sorted();
+  for (const g of list) {
+    if (g.status==="queued" && !busy.tx.has(g.id)) {
+      if (g.nextAt > now) { soonest = Math.min(soonest, g.nextAt); continue; }
+      if (busy.tx.size >= S.ctx) break;
+      runTx(g);
+    }
+  }
+  for (const g of list) {
+    if (g.status==="transcribed" && !busy.fx.has(g.id)) {
+      if (g.nextAt > now) { soonest = Math.min(soonest, g.nextAt); continue; }
+      if (busy.fx.size >= S.cfx) break;
+      runFx(g);
+    }
+  }
+  clearTimeout(wakeTimer);
+  if (soonest < Infinity) wakeTimer = setTimeout(pump, Math.max(200, soonest-now));
+  renderStats();
+}
+function backoff(g, e, back){
+  g.tries++; g.err = e.message;
+  const fatal = e.status===401 || e.status===403 || e.status===413 || (e.status===400 && /file|audio|format/i.test(e.message));
+  if (fatal || g.tries >= 6) { g.status = back==="queued" ? "err_tx" : "err_fx"; }
+  else { g.status = back; g.nextAt = Date.now() + (e.retryAfter || Math.min(60000, 1500*2**g.tries)); }
+  if (e.status===401) toast("API key 無效，請到設定檢查");
+}
+async function runTx(g){
+  busy.tx.add(g.id); g.status="transcribing"; g.err=""; render();
+  try {
+    const t = await transcribe(g);
+    g.raw = t; g.tries = 0; g.nextAt = 0;
+    if (looksHallucinated(t)) { g.status="skip"; g.text="（無有效語音，略過）"; }
+    else g.status = "transcribed";
+  } catch(e){ backoff(g, e, "queued"); }
+  finally { busy.tx.delete(g.id); saveSeg(g, true); render(); pump(); }
+}
+async function runFx(g){
+  busy.fx.add(g.id); g.status="fixing"; g.err=""; render();
+  try {
+    const t = await fixText(g);
+    if (!g.edited) g.text = t;
+    g.status = "done"; g.tries = 0; g.nextAt = 0;
+  } catch(e){ backoff(g, e, "transcribed"); }
+  finally { busy.fx.delete(g.id); saveSeg(g, true); render(); pump(); }
+}
+window.addEventListener("online", pump);
+
+/* ---------- 畫面 ---------- */
+const STAT = {queued:["等待轉錄","q"], transcribing:["轉錄中","t"], transcribed:["等待修正","q"], fixing:["修正中","t"], done:["完成","d"], skip:["略過","q"], err_tx:["轉錄失敗","e"], err_fx:["修正失敗","e"]};
+let rq = 0, full = false;
+function render(force){ if (force) full = true; if (rq) return; rq = requestAnimationFrame(()=>{ rq=0; draw(full); full=false; }); }
+function renderStats(){
+  const c = {}; segs.forEach(g => c[g.status]=(c[g.status]||0)+1);
+  const wait = (c.queued||0)+(c.transcribed||0);
+  $("#stats").innerHTML = [
+    `<span class="chip">共 ${segs.size} 段</span>`,
+    wait ? `<span class="chip q">排隊 ${wait}</span>` : "",
+    (c.transcribing||c.fixing) ? `<span class="chip t">處理中 ${(c.transcribing||0)+(c.fixing||0)}</span>` : "",
+    `<span class="chip d">完成 ${c.done||0}</span>`,
+    (c.err_tx||c.err_fx) ? `<span class="chip e">失敗 ${(c.err_tx||0)+(c.err_fx||0)}</span>` : "",
+    !S.key ? `<span class="chip e">尚未設定 API key</span>` : ""
+  ].join("");
+}
+function segHTML(g){
+  const [lab, cls] = STAT[g.status] || [g.status,"q"];
+  const shown = g.text || g.raw || "";
+  const placeholder = {queued:"等待轉錄…", transcribing:"轉錄中…"}[g.status];
+  return `<div class="seg ${g.status==="skip"?"skip":""}" data-id="${g.id}">
+    <div class="n">#${g.seq}<span>${clock(g.at)}</span></div>
+    <div class="body">
+      <div class="txt" ${g.status==="done"||g.edited?'contenteditable="true"':""} spellcheck="false">${esc(shown || placeholder || "")}</div>
+      ${g.raw && g.text && g._showRaw ? `<div class="raw">原始：${esc(g.raw)}</div>` : ""}
+      <div class="meta">
+        <span class="chip ${cls}">${lab}${g.tries&&g.status!=="done"?" · 重試"+g.tries:""}</span>
+        ${g.dur?`<span class="chip">${g.dur.toFixed(1)}s</span>`:""}
+        ${g.edited?`<span class="chip">已手改</span>`:""}
+        ${g.raw && g.text ? `<button type="button" data-act="raw">${g._showRaw?"隱藏原始":"原始"}</button>`:""}
+        ${g.blob ? `<button type="button" data-act="play">播放</button>`:""}
+        ${(g.status.startsWith("err")||g.status==="done"||g.status==="skip") && (g.blob||g.raw) ? `<button type="button" data-act="redo">重做</button>`:""}
+        ${g.err && g.status!=="done" ? `<span class="note" style="color:var(--err)">${esc(g.err).slice(0,120)}</span>`:""}
+      </div>
+    </div></div>`;
+}
+function draw(force){
+  renderStats();
+  const pane = $("#p-segs");
+  const list = sorted();
+  if (!list.length) { pane.innerHTML = '<p class="empty">按紅色按鈕開始錄音。說話停頓時會自動切段送出，轉錄與修正在背景排隊進行，錄音不會等待。</p>'; drawMerged(); return; }
+  const editing = document.activeElement?.closest?.(".seg")?.dataset.id;
+  if (force || !pane.querySelector(".seg")) pane.innerHTML = list.map(segHTML).join("");
+  else {
+    // 增量更新：只替換有變動的段落，保留正在編輯的那一段
+    const have = new Map([...pane.querySelectorAll(".seg")].map(el=>[el.dataset.id, el]));
+    let prevEl = null;
+    for (const g of list) {
+      const sig = g.status+"|"+g.tries+"|"+g.text.length+"|"+g.raw.length+"|"+(g._showRaw?1:0)+"|"+(g.blob?1:0)+"|"+(g.edited?1:0);
+      let el = have.get(g.id);
+      if (el && (el._sig !== sig) && g.id !== editing) { const n = document.createElement("div"); n.innerHTML = segHTML(g); const ne=n.firstElementChild; el.replaceWith(ne); el = ne; }
+      else if (!el) { const n = document.createElement("div"); n.innerHTML = segHTML(g); el = n.firstElementChild; prevEl ? prevEl.after(el) : pane.prepend(el); }
+      el._sig = sig; prevEl = el;
+    }
+  }
+  drawMerged();
+}
+function mergedText(){
+  const parts = sorted().filter(g=>g.status==="done" && g.text).map(g=>g.text.trim());
+  const paras = []; let buf = "";
+  for (const p of parts) {
+    const pieces = p.split(/\n+/);
+    pieces.forEach((x,i) => { if (i>0 && buf) { paras.push(buf); buf=""; } buf += x; });
+    if (buf.length > 260 && /[。！？」]$/.test(buf)) { paras.push(buf); buf=""; }
+  }
+  if (buf) paras.push(buf);
+  return paras;
+}
+function drawMerged(){
+  const paras = mergedText();
+  $("#mergedDoc").innerHTML = paras.length ? paras.map(p=>`<p>${esc(p)}</p>`).join("") : '<p class="empty">還沒有完成的段落。</p>';
+}
+$("#p-segs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const g = segs.get(b.closest(".seg").dataset.id); if (!g) return;
+  if (b.dataset.act==="raw") { g._showRaw = !g._showRaw; render(); }
+  if (b.dataset.act==="play") { const a = new Audio(URL.createObjectURL(g.blob)); a.play().catch(()=>toast("無法播放此格式")); a.onended=()=>URL.revokeObjectURL(a.src); }
+  if (b.dataset.act==="redo") { g.tries=0; g.nextAt=0; g.edited=false; g.err=""; g.status = g.blob ? "queued" : "transcribed"; g.text=""; saveSeg(g,true); render(); pump(); }
+});
+$("#p-segs").addEventListener("input", e => {
+  const el = e.target.closest(".txt"); if (!el) return;
+  const g = segs.get(el.closest(".seg").dataset.id); g.text = el.innerText; g.edited = true; saveSeg(g); drawMerged();
+});
+$("#p-segs").addEventListener("focusout", e => { if (e.target.closest(".txt")) render(); });
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on", x===b));
+  ["segs","merged","org"].forEach(t => $("#p-"+t).hidden = t!==b.dataset.tab);
+});
+
+/* ---------- 匯出 ---------- */
+function download(name, text, type){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
+async function copy(text){ try { await navigator.clipboard.writeText(text); toast("已複製"); } catch { toast("無法複製，請手動選取"); } }
+const fname = ext => (cur.name.replace(/[\\/:*?"<>|\s]+/g,"_")) + "." + ext;
+$("#copyMerged").onclick = () => copy(mergedText().join("\n\n"));
+$("#dlMerged").onclick = () => download(fname("txt"), mergedText().join("\n\n"), "text/plain;charset=utf-8");
+$("#copyOrg").onclick = () => cur.organized ? copy(cur.organized) : toast("還沒有整理稿");
+$("#dlOrg").onclick = () => cur.organized ? download(fname("md"), cur.organized, "text/markdown;charset=utf-8") : toast("還沒有整理稿");
+$("#dlJson").onclick = () => download(fname("json"), JSON.stringify({session:cur, segments:sorted().map(({blob,_showRaw,...r})=>r)}, null, 2), "application/json");
+$("#clearAudio").onclick = async () => { let n=0; for (const g of segs.values()) if (g.blob && (g.status==="done"||g.status==="skip")) { g.blob=null; n++; await saveSeg(g,true); } render(true); $("#setMsg").textContent = `已刪除 ${n} 個音檔`; };
+
+/* ---------- 整理全文 ---------- */
+const ORG_PART = `你是筆記整理者。以下是一段台灣正體中文逐字稿（已校對）的一部分。請整理成 Markdown：
+- 依內容主題切成數個「### 小標」，每節用通順的段落改寫，必要時用條列。
+- 保留所有具體資訊：數字、名稱、例子、步驟、條件、結論；刪掉重複與口語贅詞。
+- 不可杜撰原文沒有的內容；聽不清或不確定處標「（？）」。
+- 不要寫總標題與摘要，只輸出各小節。使用台灣正體中文與全形標點。`;
+const ORG_FINAL = `你是筆記編輯。以下是依序整理好的筆記小節。請產出最終 Markdown 筆記，結構固定為：
+# 標題（依內容自擬）
+## 摘要
+3–6 個重點條列。
+## 內容整理
+把小節依邏輯排序、合併重複主題，改用「### 小標」；保留所有具體資訊，不可刪減實質內容，不可杜撰。
+## 重點整理與待辦
+條列關鍵結論、規則、行動事項（沒有就寫「無」）。
+## 名詞
+文中出現的專有名詞與簡短說明（沒有就省略本節）。
+使用台灣正體中文與全形標點。只輸出筆記本身。`;
+async function chat(model, sys, user, effort){
+  for (let i=0;;i++) {
+    try { const j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+      model, temperature:0.3, reasoning_effort:effort, max_completion_tokens:8192, messages:[{role:"system",content:sys},{role:"user",content:user}]})});
+      return (j.choices?.[0]?.message?.content||"").trim();
+    } catch(e){ if (i>=5 || e.status===401 || e.status===400) throw e; $("#orgMsg").textContent = "等待額度後重試…"; await sleep(e.retryAfter || 3000*2**i); }
+  }
+}
+$("#orgBtn").onclick = async () => {
+  readForm();
+  const text = mergedText().join("\n\n");
+  if (!text) return toast("還沒有完成的段落");
+  const pending = [...segs.values()].filter(g=>!["done","skip","err_tx","err_fx"].includes(g.status)).length;
+  const btn = $("#orgBtn"); btn.disabled = true;
+  try {
+    const CH = 3500, chunks = []; let b = "";
+    for (const p of text.split("\n\n")) { if (b && (b.length + p.length) > CH) { chunks.push(b); b = ""; } b += (b?"\n\n":"") + p; }
+    if (b) chunks.push(b);
+    const parts = [];
+    for (let i=0;i<chunks.length;i++) { $("#orgMsg").textContent = `整理第 ${i+1}/${chunks.length} 部分…`; parts.push(await chat(S.orgModel, ORG_PART, chunks[i], "medium")); }
+    $("#orgMsg").textContent = "合併成最終筆記…";
+    const final = await chat(S.orgModel, ORG_FINAL, parts.join("\n\n"), "medium");
+    cur.organized = final; await put("sessions", cur);
+    $("#orgDoc").innerHTML = md(final);
+    $("#orgMsg").textContent = `完成（${new Date().toLocaleTimeString("zh-TW",{hour12:false})}）` + (pending ? `，另有 ${pending} 段仍在處理，完成後可再整理一次` : "");
+  } catch(e){ $("#orgMsg").textContent = "整理失敗：" + e.message; }
+  finally { btn.disabled = false; }
+};
+function md(src){
+  const lines = esc(src).split("\n"); let out = "", list = null;
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  const close = () => { if (list) { out += `</${list}>`; list = null; } };
+  for (const l of lines) {
+    let m;
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { close(); const n=Math.min(m[1].length,3); out += `<h${n}>${inline(m[2])}</h${n}>`; }
+    else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { if (list!=="ul") { close(); out += "<ul>"; list="ul"; } out += `<li>${inline(m[1])}</li>`; }
+    else if ((m = l.match(/^\s*\d+[.)、]\s*(.*)/))) { if (list!=="ol") { close(); out += "<ol>"; list="ol"; } out += `<li>${inline(m[1])}</li>`; }
+    else if (!l.trim()) close();
+    else { close(); out += `<p>${inline(l)}</p>`; }
+  }
+  close(); return out;
+}
+
+/* ---------- 啟動 ---------- */
+window.addEventListener("beforeunload", e => { if (rec.on || busy.tx.size || busy.fx.size) { e.preventDefault(); e.returnValue = ""; } });
+openDB().then(d => { db = d; return loadSessions(); }).catch(e => toast("無法開啟本機儲存：" + e.message));
+</script>
+</body>
+</html>
