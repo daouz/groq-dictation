@@ -11,358 +11,407 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* 版面：頂部固定控制列；逐段／合併稿／整理稿三個分頁；審閱面板在右側（手機為底部抽屜） */
+/* 版面：上方是工作階段與分頁（逐字稿優先），錄音控制固定在底部拇指區；審閱面板桌面在右側、手機為底部抽屜。
+   視覺：介面用無襯線、逐字稿用明體，像「監聽台＋稿紙」。 */
 :root{
-  --bg:#f3f5f4; --panel:#ffffff; --fg:#17201c; --muted:#5d6b64; --line:#d9e0dc;
-  --accent:#0f7a5a; --accent-fg:#ffffff; --rec:#d23b3b; --warn:#a86b12; --err:#c0392b; --soft:#e7efeb;
-  --hl-h:#f8d3cd; --hl-s:#f7e3ad; --hl-t:#d3e3f8; --banner:#fff4dc;
-  --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --bg:#f3f4f1; --panel:#ffffff; --sunk:#e9ebe6; --fg:#171a18; --muted:#5d6660; --faint:#8a938d; --line:#dcdfd9;
+  --accent:#0b7a61; --accent-fg:#ffffff; --accent-soft:#dcefe8; --rec:#d6362b; --warn:#94650c; --warn-soft:#f6ecd6; --err:#bd3527; --err-soft:#f8e3df;
+  --hl-h:#f6d0ca; --hl-s:#f3e1aa; --hl-t:#cfe0f6; --banner:#fbf3df; --shadow:0 1px 2px rgba(20,30,25,.06),0 8px 24px rgba(20,30,25,.08);
+  --ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --read:"Noto Serif TC","Songti TC","PMingLiU",serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px; --dock-h:84px;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#111614; --panel:#1a211e; --fg:#e4ebe7; --muted:#93a39b; --line:#2c3632;
-  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a;
-  --hl-h:#5b2620; --hl-s:#4d3b12; --hl-t:#1d3452; --banner:#3a2f14; color-scheme:dark}}
+  --bg:#0e1110; --panel:#161a18; --sunk:#1c211e; --fg:#e5ebe7; --muted:#97a29b; --faint:#6c7670; --line:#28302b;
+  --accent:#45c39c; --accent-fg:#06120d; --accent-soft:#16302a; --rec:#ff5a4d; --warn:#e2ac4c; --warn-soft:#2e2615; --err:#ff7a68; --err-soft:#341d19;
+  --hl-h:#5a2620; --hl-s:#4b3a12; --hl-t:#1c3350; --banner:#2b2414; --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.45); color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#111614; --panel:#1a211e; --fg:#e4ebe7; --muted:#93a39b; --line:#2c3632;
-  --accent:#3fbf8f; --accent-fg:#0b1310; --rec:#ff6b6b; --warn:#e0a94a; --err:#ff7a6b; --soft:#20302a;
-  --hl-h:#5b2620; --hl-s:#4d3b12; --hl-t:#1d3452; --banner:#3a2f14; color-scheme:dark}
+  --bg:#0e1110; --panel:#161a18; --sunk:#1c211e; --fg:#e5ebe7; --muted:#97a29b; --faint:#6c7670; --line:#28302b;
+  --accent:#45c39c; --accent-fg:#06120d; --accent-soft:#16302a; --rec:#ff5a4d; --warn:#e2ac4c; --warn-soft:#2e2615; --err:#ff7a68; --err-soft:#341d19;
+  --hl-h:#5a2620; --hl-s:#4b3a12; --hl-t:#1c3350; --banner:#2b2414; --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.45); color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
-body{background:var(--bg);color:var(--fg);font:15px/1.7 var(--font);padding-inline:16px;padding-block:0 80px}
-.wrap{max-width:900px;margin:0 auto}
-header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-block:14px 8px}
-h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.02em}
-h1 small{font:500 12px var(--mono);color:var(--muted);margin-left:6px}
-h2.sub{font-size:15px;margin:6px 0 0}
+body{background:var(--bg);color:var(--fg);font:15px/1.65 var(--ui);padding-inline:16px;padding-block:0 calc(var(--dock-h) + 40px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
+.wrap{max-width:920px;margin:0 auto}
 .sp{flex:1}
-button,select,input,textarea{font:inherit;color:inherit}
-button,.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;display:inline-block;line-height:1.5}
-button:hover,.btn:hover{border-color:var(--accent)}
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.txt:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-button.danger{color:var(--err)}
-button:disabled{opacity:.45;cursor:default}
-input[type=text],input[type=password],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:100%;min-width:0}
-textarea{resize:vertical;min-height:60px;line-height:1.75}
-label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
-.pair{display:flex;gap:6px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
-#settings{display:grid;gap:12px;margin-bottom:12px}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
-.checks{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px}
-.note{font-size:12px;color:var(--muted)}
+.note{font-size:12.5px;color:var(--muted)}
 .err{color:var(--err)}
-.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px}
-.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-#recBtn{width:56px;height:56px;border-radius:50%;border:none;background:var(--rec);color:#fff;font-weight:700;font-size:13px;flex:none}
-#recBtn.on{animation:pulse 1.4s infinite}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 55%,transparent)}50%{box-shadow:0 0 0 10px transparent}}
-@media (prefers-reduced-motion:reduce){#recBtn.on{animation:none}}
-.timer{font:600 20px var(--mono);font-variant-numeric:tabular-nums;min-width:86px}
-.meter{height:10px;background:var(--soft);border-radius:6px;position:relative;overflow:hidden}
-.meter i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0;transition:width .06s}
-.meter b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn)}
-.segprog{height:3px;background:var(--soft);border-radius:2px;margin-top:6px;overflow:hidden}
-.segprog i{display:block;height:100%;width:0;background:var(--muted)}
-.banner{background:var(--banner);border:1px solid var(--warn);border-radius:8px;padding:6px 10px;font-size:13px;margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.stats{display:flex;flex-wrap:wrap;gap:6px;margin-block:6px 2px;font-size:12px}
-.chip{font:500 12px var(--mono);padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-.chip.t,.chip.w{color:var(--warn);border-color:var(--warn)} .chip.d{color:var(--accent);border-color:var(--accent)} .chip.e{color:var(--err);border-color:var(--err)}
-button.chip{cursor:pointer;background:none}
-.sess{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px}
-.sess select,.sess input{width:auto;min-width:160px;flex:1}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:10px;overflow-x:auto}
-.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted);white-space:nowrap}
-.tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:700}
-.pane{padding-top:12px}
+.empty{color:var(--muted);text-align:center;padding:48px 12px;line-height:1.9}
+
+/* ---------- 控制元件 ---------- */
+button,select,input,textarea{font:inherit;color:inherit}
+button,.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.4;transition:background .15s,border-color .15s}
+button:hover,.btn:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+button:active{transform:translateY(1px)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.txt:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.ghost{background:transparent!important;border-color:transparent!important;color:var(--muted)}
+.ghost:hover{background:var(--sunk)!important;color:var(--fg)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+button.danger{color:var(--err)}
+button:disabled{opacity:.4;cursor:default;transform:none}
+.ico{width:18px;height:18px;flex:none;display:block}
+.icobtn{padding:7px;border-radius:9px}
+input[type=text],input[type=password],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:60px;line-height:1.8}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;vertical-align:-3px;margin:0 6px 0 0}
+input[type=range]{accent-color:var(--accent);width:100%}
+label.f{display:grid;gap:5px;font-size:13px;color:var(--muted)}
+.pair{display:flex;gap:6px}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
 .row.tight{gap:6px;margin:0}
-.row.tight button,.row.tight .btn{padding:2px 10px;font-size:13px}
-.fchips{display:flex;flex-wrap:wrap;gap:6px}
-.fchips button{border-radius:999px;padding:2px 12px;font-size:13px}
-.fchips button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.row.tight button,.row.tight .btn{padding:3px 10px;font-size:13px}
+.chip{font:500 11.5px/1.6 var(--ui);padding:0 8px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap;border:0}
+.chip.t,.chip.w{background:var(--warn-soft);color:var(--warn)}
+.chip.d{background:var(--accent-soft);color:var(--accent)}
+.chip.e{background:var(--err-soft);color:var(--err)}
+button.chip{cursor:pointer}
+kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+
+/* ---------- 頁首 ---------- */
+.top{display:flex;align-items:center;gap:6px;padding-block:12px 2px}
+.brand{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.mark{width:26px;height:26px;border-radius:8px;background:var(--accent);flex:none;display:grid;place-items:center}
+.mark svg{width:15px;height:15px;color:var(--accent-fg)}
+#sessSel,#renInput{border:none;background:transparent;font:700 18px/1.3 var(--ui);padding:4px 26px 4px 2px;width:auto;max-width:100%;min-width:0;flex:1;appearance:none;-webkit-appearance:none;text-overflow:ellipsis;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 12px) 55%,calc(100% - 7px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+#renInput{background:var(--panel);border:1px solid var(--accent);padding-right:10px;background-image:none}
+details.menu{position:relative}
+details.menu>summary{list-style:none}
+details.menu>summary::-webkit-details-marker{display:none}
+.menu-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:220px;display:grid;gap:2px}
+.menu-pop button,.menu-pop .btn{border:none;background:none;justify-content:flex-start;width:100%;padding:9px 10px;border-radius:8px}
+.menu-pop button:hover,.menu-pop .btn:hover{background:var(--sunk)}
+.menu-pop hr{border:none;border-top:1px solid var(--line);margin:4px 2px}
+.menu-pop .confirm{padding:6px 8px}
+.stats{display:flex;flex-wrap:wrap;gap:5px;margin-block:4px 8px;font-size:12px}
+
+/* ---------- 設定 ---------- */
+#settings{margin-bottom:14px;display:grid;gap:18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.sethead{display:flex;align-items:center;gap:8px}
+.sethead h2{font-size:16px;margin:0}
+.setsec{display:grid;gap:10px}
+.setsec h3{font:600 12px var(--ui);letter-spacing:.08em;color:var(--muted);margin:0;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.checks{display:grid;gap:8px;font-size:13.5px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+
+/* ---------- 上方黏貼列：分頁、提示、時間軸 ---------- */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:15;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);margin-inline:-16px;padding:0 16px 6px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 12px 8px;color:var(--muted);white-space:nowrap;font-weight:500}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:700}
+#tl{display:block;width:100%;height:14px;margin-top:8px;border-radius:4px;cursor:pointer}
+.banner{background:var(--banner);border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);border-radius:10px;padding:8px 10px;font-size:13px;margin-top:8px;display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap}
+.banner span{display:inline-flex;gap:6px;align-items:baseline}
+.banner .x{border:none;background:none;padding:0 4px;color:var(--muted);font-size:16px;line-height:1}
+.banner button:not(.x){padding:3px 10px;font-size:13px}
+
+/* ---------- 底部錄音台 ---------- */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:0 12px calc(10px + env(safe-area-inset-bottom,0px));pointer-events:none}
+.dock-in{pointer-events:auto;max-width:920px;margin:0 auto;background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:10px 12px;display:grid;gap:6px}
+.ctrl{display:flex;align-items:center;gap:12px}
+#recBtn{width:56px;height:56px;border-radius:50%;border:3px solid color-mix(in srgb,var(--rec) 30%,var(--panel));background:var(--panel);flex:none;display:grid;place-items:center;padding:0;box-shadow:0 2px 8px color-mix(in srgb,var(--rec) 25%,transparent)}
+#recBtn::before{content:"";width:24px;height:24px;border-radius:50%;background:var(--rec);transition:all .2s}
+#recBtn.on{border-color:var(--rec);animation:pulse 1.6s infinite}
+#recBtn.on::before{width:20px;height:20px;border-radius:5px}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 45%,transparent)}50%{box-shadow:0 0 0 9px transparent}}
+@media (prefers-reduced-motion:reduce){#recBtn.on{animation:none}}
+.meterwrap{flex:1;min-width:0;display:grid;gap:5px}
+.meterline{display:flex;align-items:baseline;gap:10px}
+.timer{font:600 19px var(--mono);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.recstate{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recstate.on{color:var(--rec);font-weight:600}
+.meter{height:6px;background:var(--sunk);border-radius:6px;position:relative;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0;transition:width .06s;border-radius:6px}
+.meter b{position:absolute;top:0;bottom:0;width:2px;background:var(--warn)}
+.segprog{height:2px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.segprog i{display:block;height:100%;width:0;background:var(--faint)}
+#cutBtn{flex:none;font-size:13px;padding:8px 12px;border-radius:10px}
+.live{display:flex;gap:8px;align-items:center;font-size:13px;min-height:20px;overflow:hidden;white-space:nowrap;padding-inline:4px}
+.live #liveTxt{overflow:hidden;text-overflow:ellipsis;min-width:0;font-family:var(--read)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
+.dot.ok{background:var(--accent)} .dot.mid{background:var(--warn)} .dot.bad{background:var(--err)}
+
+/* ---------- 分頁內容 ---------- */
+.pane{padding-top:12px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.seg-tabs{display:inline-flex;background:var(--sunk);border-radius:10px;padding:3px;gap:2px}
+.seg-tabs button{border:none;border-radius:8px;padding:5px 12px;font-size:13.5px;background:transparent;color:var(--muted)}
+.seg-tabs button.on{background:var(--panel);color:var(--fg);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+#orderBtn{font-size:12.5px;padding:5px 10px;color:var(--muted)}
+.fchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding:0 16px 2px;flex:1 1 100%}
+.fchips::-webkit-scrollbar{display:none}
+.fchips button{border-radius:999px;padding:3px 12px;font-size:13px;white-space:nowrap;flex:none;background:transparent}
+.fchips button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 details.fr{margin-bottom:10px}
-details summary{cursor:pointer;color:var(--muted);font-size:13px}
-.frbox{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;align-items:center}
+details summary{cursor:pointer;color:var(--muted);font-size:13px;list-style:none;display:inline-flex;align-items:center;gap:6px}
+details summary::-webkit-details-marker{display:none}
+details.fr>summary::before{content:"▸";font-size:11px;transition:transform .15s}
+details.fr[open]>summary::before{transform:rotate(90deg)}
+.toolsbox{display:grid;gap:12px;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.frbox{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center}
 @media (max-width:560px){.frbox{grid-template-columns:1fr}}
-.seg{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 8px 12px 10px;border-bottom:1px solid var(--line)}
-.seg.need{box-shadow:inset 3px 0 0 var(--err)}
-.seg.cur{background:var(--soft)}
-.seg .n{font:600 12px var(--mono);color:var(--muted);text-align:right;min-width:44px;font-variant-numeric:tabular-nums}
-.seg .n span{display:block;font-weight:400}
+
+/* ---------- 段落列表 ---------- */
+#segList{border-top:1px solid var(--line)}
+.seg{display:grid;grid-template-columns:52px 1fr;gap:2px 12px;padding:14px 4px 12px;border-bottom:1px solid var(--line);position:relative}
+.seg.need{background:linear-gradient(90deg,color-mix(in srgb,var(--err) 7%,transparent),transparent 60%)}
+.seg.need::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;background:var(--err)}
+.seg.cur{background:var(--accent-soft)}
+.seg .n{font:600 12px/1.5 var(--mono);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;padding-top:3px}
+.seg .n span{display:block;font-weight:400;color:var(--faint);font-size:11px}
 .seg .body{min-width:0}
-.seg .txt{white-space:pre-wrap;word-break:break-word;cursor:pointer;border-radius:6px}
-.seg .txt:hover{background:var(--soft)}
-.seg .ph{color:var(--muted);font-style:italic}
-.seg.skip .txt{color:var(--muted);font-size:13px}
-.seg .meta,.rvchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
-.seg .meta button{padding:1px 8px;font-size:12px}
+.seg .txt{font:16px/1.85 var(--read);white-space:pre-wrap;word-break:break-word;cursor:pointer;border-radius:6px;margin:-2px -6px;padding:2px 6px}
+.seg .txt:hover{background:var(--sunk)}
+.seg .ph{color:var(--faint);font:italic 14px var(--ui)}
+.seg.skip .txt{color:var(--faint);font:13px var(--ui)}
+.seg .meta,.rvchips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
+.seg .meta .acts{margin-left:auto;display:flex;gap:2px}
+.seg .meta button{padding:2px 9px;font-size:12.5px;border-color:transparent;background:transparent;color:var(--muted)}
+.seg .meta button:hover{background:var(--sunk);color:var(--fg)}
+.seg.flash{animation:flash 1.6s}
+@keyframes flash{0%,40%{background:color-mix(in srgb,var(--accent) 22%,transparent)}100%{background:transparent}}
 mark{color:inherit;border-radius:3px;padding:0 1px}
 mark.hl-h{background:var(--hl-h)} mark.hl-s{background:var(--hl-s)} mark.hl-t{background:var(--hl-t)}
-.empty{color:var(--muted);text-align:center;padding:40px 10px}
-.doc{word-break:break-word;line-height:1.95;max-width:70ch}
-.doc p{margin:0 0 1em}
+.prov{color:var(--muted);font-style:italic}
+.runrow button,.chhead button{width:100%;text-align:left;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;border:none;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:11px 6px;color:var(--muted);font-size:13.5px}
+.runrow button:hover,.chhead button:hover{background:var(--sunk)}
+.chhead button{color:var(--fg);padding-block:14px 10px;border-bottom:1px solid var(--fg);font-size:15px}
+.chhead.need button{border-bottom-color:var(--err)}
+.tw{display:inline-block;width:1em;color:var(--muted);font-size:11px}
+
+/* ---------- 問題清單 ---------- */
+.icard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:grid;gap:8px;background:var(--panel)}
+.icard.seg-c{border-left:3px solid var(--err)}
+.ihead{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ihead .ref{font:600 12px var(--mono);padding:1px 7px;color:var(--accent);border-radius:6px}
+.ictx{font:16px/1.85 var(--read);word-break:break-word}
+
+/* ---------- 閱讀、合併稿、整理稿 ---------- */
+.doc{font:17px/2 var(--read);word-break:break-word;max-width:38em}
+.doc p{margin:0 0 1.1em}
+#readDoc h3{font:700 15px var(--ui);margin:1.6em 0 .5em;color:var(--muted);letter-spacing:.04em}
+.rs{cursor:pointer;border-radius:3px}
+.rs:hover{background:var(--sunk)}
+.rs sup{font:500 10px var(--mono);color:var(--faint);margin-right:2px}
+.rs.flag,.ms.flag{text-decoration:underline wavy var(--err);text-underline-offset:5px;text-decoration-thickness:1px}
+.rs.pend,.ms.pend{color:var(--muted)}
 .ms{cursor:pointer;border-radius:3px}
-.ms:hover{background:var(--soft)}
-.ms.flag{text-decoration:underline wavy var(--err);text-underline-offset:4px}
-.md{line-height:1.85;max-width:70ch;word-break:break-word}
-.md h1{font-size:22px;margin:.2em 0 .6em;text-wrap:balance}
-.md h2{font-size:18px;margin:1.4em 0 .5em;padding-bottom:4px;border-bottom:1px solid var(--line)}
-.md h3{font-size:16px;margin:1.2em 0 .4em}
+.ms:hover{background:var(--sunk)}
+.ms.pend i{font:normal 12px var(--ui);margin-right:6px}
+.md{font:16px/1.95 var(--read);max-width:38em;word-break:break-word}
+.md h1{font:700 24px/1.4 var(--ui);margin:.2em 0 .7em;text-wrap:balance}
+.md h2{font:700 18px/1.5 var(--ui);margin:1.6em 0 .6em;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.md h3{font:700 16px/1.5 var(--ui);margin:1.3em 0 .4em}
 .md ul,.md ol{padding-left:1.4em;margin:.4em 0 1em}
 .md p{margin:0 0 .9em}
 .md mark{background:var(--hl-s)}
-a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding:0 4px;border:1px solid var(--line);border-radius:4px;white-space:nowrap}
-.items{margin-bottom:14px;display:grid;gap:4px}
-.items .item{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
-.items .q{font-weight:500}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(470px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:30;overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;align-content:start;box-shadow:-8px 0 24px rgba(0,0,0,.14)}
-@media (max-width:720px){.drawer{top:auto;left:0;width:auto;height:86vh;height:86dvh;border-left:none;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.18)}}
-@media (min-width:1180px){body.rv-open .wrap{margin-right:490px}}
-.rvhead{display:flex;align-items:center;gap:8px}
-.rvhead strong{font:700 15px var(--mono)}
-#rvAudio{width:100%}
-.rate button.on{border-color:var(--accent);color:var(--accent)}
-.iss{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:6px;font-size:14px}
-.iss.hl-h{background:color-mix(in srgb,var(--hl-h) 55%,transparent)}
-.iss.hl-s{background:color-mix(in srgb,var(--hl-s) 55%,transparent)}
-.iss.hl-t{background:color-mix(in srgb,var(--hl-t) 55%,transparent)}
-.iss.done{opacity:.55}
-.alt{border-top:1px solid var(--line);padding:8px 0;display:grid;gap:4px}
-.alt .rawtxt{font-size:13px;white-space:pre-wrap;color:var(--muted);word-break:break-word}
+a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding:0 5px;background:var(--accent-soft);border-radius:5px;white-space:nowrap}
+.items{margin-bottom:16px;display:grid;gap:4px}
+.items .item{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.items .q{font-family:var(--read)}
+
+/* ---------- 審閱面板 ---------- */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:30;overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 18px calc(18px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;align-content:start;grid-auto-rows:max-content;box-shadow:var(--shadow)}
+@media (max-width:720px){.drawer{top:auto;left:0;width:auto;height:88vh;height:88dvh;border-left:none;border-top:1px solid var(--line);border-radius:18px 18px 0 0}
+  .drawer::before{content:"";position:sticky;top:-6px;justify-self:center;width:40px;height:4px;border-radius:4px;background:var(--line);margin-bottom:-6px}}
+@media (min-width:1180px){body.rv-open .wrap{margin-right:500px} body.rv-open .dock{right:480px}}
+.rvhead{display:flex;align-items:center;gap:8px;position:sticky;top:calc(-12px - env(safe-area-inset-top,0px));background:var(--panel);z-index:1;padding-block:6px}
+.rvhead strong{font:700 17px var(--mono)}
+#rvAudio{width:100%;height:40px}
+.rate{margin-top:6px}
+.rate button.on{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+#rvText{font:16px/1.85 var(--read);min-height:140px}
+.iss{border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:grid;gap:6px;font-size:14px}
+.iss.hl-h{background:color-mix(in srgb,var(--hl-h) 45%,transparent)}
+.iss.hl-s{background:color-mix(in srgb,var(--hl-s) 45%,transparent)}
+.iss.hl-t{background:color-mix(in srgb,var(--hl-t) 45%,transparent)}
+.iss.done{opacity:.5}
+.rvacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px}
+.rvacts button{justify-content:center}
+.alt{border-top:1px solid var(--line);padding:9px 0;display:grid;gap:4px}
+.alt .rawtxt{font:14px/1.75 var(--read);white-space:pre-wrap;color:var(--muted);word-break:break-word}
 .hist{font-size:13px;display:flex;gap:8px;align-items:baseline;border-top:1px solid var(--line);padding:6px 0}
 .hist span.t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
-.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:50}
+.pv{min-height:36px;width:100%;justify-content:flex-start;font-size:13px;color:var(--muted);background:var(--sunk);border:1px dashed var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;text-align:left}
+.drawer.pull-next #rvNextPv,.drawer.pull-prev #rvPrevPv{border-color:var(--accent);color:var(--accent);border-style:solid}
+#rvNoAudio{margin:4px 0 0}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--dock-h) + 28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:50}
 .toast.on{opacity:1}
 .confirm{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
-#tl{display:block;width:100%;height:16px;margin-top:8px;border-radius:4px;cursor:pointer}
-.seg-tabs{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg-tabs button{border:none;border-radius:0;padding:5px 12px;font-size:14px;background:var(--panel)}
-.seg-tabs button+button{border-left:1px solid var(--line)}
-.seg-tabs button.on{background:var(--accent);color:var(--accent-fg)}
-.runrow button,.chhead button{width:100%;text-align:left;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;border:none;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:10px 6px;color:var(--muted)}
-.runrow button:hover,.chhead button:hover{background:var(--soft)}
-.chhead button{color:var(--fg);padding-block:12px;border-bottom:2px solid var(--line)}
-.chhead.need button{border-bottom-color:var(--err)}
-.tw{display:inline-block;width:1em;color:var(--muted)}
-.seg.flash{animation:flash 1.6s}
-@keyframes flash{0%,40%{background:color-mix(in srgb,var(--accent) 25%,transparent)}100%{background:transparent}}
-.icard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:grid;gap:6px;background:var(--panel)}
-.icard.seg-c{border-color:color-mix(in srgb,var(--err) 50%,var(--line))}
-.ihead{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.ihead .ref{font:600 12px var(--mono);padding:0 6px;color:var(--accent)}
-.ictx{line-height:1.8;word-break:break-word}
-#readDoc h3{font-size:16px;margin:1.4em 0 .4em}
-.rs{cursor:pointer;border-radius:3px}
-.rs:hover{background:var(--soft)}
-.rs sup{font:500 10px var(--mono);color:var(--muted);margin-right:2px}
-.rs.flag{text-decoration:underline wavy var(--err);text-underline-offset:4px}
-.rs.pend{color:var(--muted)}
-.live{display:flex;gap:8px;align-items:center;margin-top:6px;font-size:13px;min-height:20px;overflow:hidden;white-space:nowrap}
-.live #liveTxt{overflow:hidden;text-overflow:ellipsis;min-width:0}
-.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}
-.dot.ok{background:var(--accent)} .dot.mid{background:var(--warn)} .dot.bad{background:var(--err)}
-.drawer{grid-auto-rows:max-content}
-.pv{min-height:36px;flex:none;display:block;text-align:left;font-size:13px;color:var(--muted);background:var(--soft);border-style:dashed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
-.drawer.pull-next #rvNextPv,.drawer.pull-prev #rvPrevPv{border-color:var(--accent);color:var(--accent);border-style:solid}
-.prov{color:var(--muted);font-style:italic}
-.ms.pend{color:var(--muted)}
-.ms.pend i{font-style:normal;font-size:12px;margin-right:6px}
-.banner span{display:inline-flex;gap:6px;align-items:baseline}
-.banner .x{border:none;background:none;padding:0 4px;color:var(--muted);font-size:16px;line-height:1}
-#orderBtn{font-size:13px;padding:5px 10px}
-kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px}
-/* 手機：控制列精簡、輸入框 16px 避免 iOS 自動放大 */
+
 @media (max-width:600px){
-  header{padding-block:10px 6px}
-  h1 small{display:none}
-  .bar{padding-block:6px}
-  .ctrl{flex-wrap:nowrap;gap:8px}
-  #recBtn{width:46px;height:46px;font-size:12px;white-space:nowrap;padding:0}
-  .timer{font-size:15px;min-width:0}
-  #cutBtn{padding:6px 8px;font-size:13px;white-space:nowrap}
-  .tabs{margin-top:6px}
-  .tabs button{padding:6px 10px}
-  .sess select{min-width:0;flex-basis:100%}
-  .sess button,.sess .btn{padding:4px 10px;font-size:13px}
+  body{font-size:15px}
+  .top{padding-block:10px 0}
+  #sessSel,#renInput{font-size:17px}
+  .seg{grid-template-columns:40px 1fr;gap:2px 10px}
+  .seg .n span{display:none}
+  .seg .txt{font-size:16px}
   input[type=text],input[type=password],input[type=number],select,textarea{font-size:16px}
-  .seg{padding-inline:4px 0;gap:4px 8px}
-  .seg .n{min-width:34px}
-  .rvhead{position:sticky;top:calc(-12px - env(safe-area-inset-top,0px));background:var(--panel);z-index:1;padding-block:4px}
+  #sessSel,#renInput{font-size:17px}
   .kbdhint{display:none}
+  .toolbar #reviewBtn{margin-left:auto}
+  #cutBtn span{display:none}
 }
 </style>
+
 </head>
 <body>
 <div class="wrap">
 
-<header>
-  <h1>Groq 連續聽寫<small>whisper → gpt-oss</small></h1>
-  <span class="sp"></span>
-  <button id="setBtn" type="button">設定與保存</button>
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 17v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+    <select id="sessSel" aria-label="切換工作階段"></select>
+  </div>
+  <label class="btn ghost icobtn" title="上傳音檔"><input id="file" type="file" accept="audio/*,video/*" multiple hidden><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span class="sr">上傳音檔</span></label>
+  <button id="setBtn" class="ghost icobtn" type="button" title="設定與保存" aria-label="設定與保存"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+  <details class="menu" id="moreMenu">
+    <summary class="btn ghost icobtn" aria-label="更多動作"><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></summary>
+    <div class="menu-pop">
+      <button id="newSess" type="button">＋ 新工作階段</button>
+      <button id="renSess" type="button">改名目前工作階段</button>
+      <button id="menuZip" type="button">匯出 ZIP（含音檔）</button>
+      <button id="pauseBtn" type="button">暫停處理</button>
+      <hr>
+      <span id="delWrap"><button id="delSess" class="danger" type="button">刪除這個工作階段</button></span>
+    </div>
+  </details>
 </header>
-
-<section id="settings" class="card" hidden>
-  <label class="f">Groq API key（只存在這台裝置的瀏覽器）
-    <input id="key" type="password" placeholder="gsk_..." autocomplete="off">
-  </label>
-  <div class="grid2">
-    <label class="f">轉錄模型
-      <select id="asr">
-        <option value="whisper-large-v3-turbo">large-v3-turbo（快、便宜）</option>
-        <option value="whisper-large-v3">large-v3（較準、較慢）</option>
-      </select>
-    </label>
-    <label class="f">可疑段落處理
-      <select id="escalate">
-        <option value="v3">自動換另一個模型重辨識並比對</option>
-        <option value="all">每段都用兩個模型比對（用量加倍）</option>
-        <option value="off">只標示，不重辨識</option>
-      </select>
-    </label>
-    <label class="f">語言
-      <select id="lang">
-        <option value="zh">中文</option>
-        <option value="">自動偵測（中英混雜時）</option>
-      </select>
-    </label>
-    <label class="f">Groq 方案（決定速度與每次送出的量）
-      <select id="tier">
-        <option value="free">免費方案</option>
-        <option value="dev">開發者方案（付費）</option>
-      </select>
-    </label>
-    <label class="f">修正模型（逐段校對）
-      <select id="fixModel">
-        <option value="openai/gpt-oss-120b">gpt-oss-120b（較準）</option>
-        <option value="openai/gpt-oss-20b">gpt-oss-20b（較快，額度另計）</option>
-      </select>
-    </label>
-    <label class="f">整理模型（整理全文）
-      <select id="orgModel">
-        <option value="openai/gpt-oss-120b">gpt-oss-120b</option>
-        <option value="openai/gpt-oss-20b">gpt-oss-20b</option>
-      </select>
-    </label>
-    <label class="f">分段方式
-      <select id="mode">
-        <option value="auto">停頓自動切段</option>
-        <option value="fixed">固定長度</option>
-      </select>
-    </label>
-    <label class="f">最短／最長秒數
-      <span class="pair"><input id="minSec" type="number" min="3" max="60" value="8" aria-label="最短秒數"><input id="maxSec" type="number" min="10" max="120" value="40" aria-label="最長秒數"></span>
-    </label>
-    <label class="f">靜音門檻（音量條上的黃線）<input id="thr" type="range" min="0.002" max="0.08" step="0.001" value="0.015"></label>
-    <label class="f">錄音位元率（Opus 單聲道）
-      <select id="kbps">
-        <option value="16">16 kbps（約 7 MB／小時）</option>
-        <option value="24">24 kbps（約 11 MB／小時）</option>
-        <option value="32">32 kbps（約 15 MB／小時）</option>
-      </select>
-    </label>
-  </div>
-  <div class="checks">
-    <label><input type="checkbox" id="agc"> 麥克風自動增益（安靜環境建議關閉，可減少幻聽）</label>
-    <label><input type="checkbox" id="autoplay"> 開啟審閱時自動播放該段</label>
-    <label><input type="checkbox" id="webasr"> 錄音時同時用 Apple／瀏覽器語音辨識比對（實驗，抓幻聽用）</label>
-  </div>
-  <label class="f">專有名詞／詞彙表（逗號或換行分隔，會提示給轉錄與修正）
-    <textarea id="vocab" placeholder="例：Groq、價格行為、停損、斐波那契"></textarea>
-  </label>
-  <div class="row" style="margin:0">
-    <button id="testKey" type="button">測試金鑰</button>
-    <span id="setMsg" class="note">變更會自動儲存</span>
-  </div>
-
-  <h2 class="sub">Google Drive 同步</h2>
-  <p id="drvInfo" class="note" style="margin:0">尚未連線。</p>
-  <div class="row" style="margin:0">
-    <button id="drvConn" type="button" class="primary">連線 Google Drive</button>
-    <button id="drvSync" type="button" hidden>立即同步</button>
-    <button id="drvListBtn" type="button" hidden>從 Drive 開啟工作階段</button>
-    <button id="drvOff" type="button" hidden>中斷連線</button>
-  </div>
-  <label class="note"><input type="checkbox" id="driveAuto"> 自動同步（音檔、逐字稿與整理稿完成後自動上傳）</label>
-  <div id="drvList"></div>
-  <p class="note" style="margin:0">只會存取這個工具在你 Drive 裡建立的檔案，看不到其他內容。Google 授權每小時到期，到期時按一次「連線」即可，期間本機照常存檔，連線後自動補傳。兩台裝置同時編輯同一個工作階段時，以最後同步的為準。</p>
-
-  <h2 class="sub">音檔保存</h2>
-  <p id="stInfo" class="note" style="margin:0">讀取儲存空間中…</p>
-  <div class="row" style="margin:0">
-    <button id="persistBtn" type="button">要求永久保存</button>
-    <button id="zipOut" type="button">匯出本工作階段 ZIP</button>
-    <label class="btn"><input id="zipIn" type="file" accept=".zip,application/zip" hidden>匯入 ZIP</label>
-    <span id="delAudioWrap"><button id="delAudio" class="danger" type="button">釋放本機空間</button></span>
-  </div>
-  <p class="note" style="margin:0">音檔與文字都存在這台裝置的瀏覽器裡，不會上傳到其他地方。Safari 會清除 7 天沒開啟的網站資料，建議把本頁「加入主畫面」，並定期匯出 ZIP。ZIP 內含每段原始音檔、逐段校對、合併稿與整理稿，可在其他裝置匯入繼續編輯。</p>
-</section>
-
-<div class="sess">
-  <select id="sessSel" aria-label="選擇工作階段"></select>
-  <button id="newSess" type="button">新工作階段</button>
-  <button id="renSess" type="button">改名</button>
-  <span id="delWrap"><button id="delSess" class="danger" type="button">刪除</button></span>
-  <button id="pauseBtn" type="button">暫停處理</button>
-  <label class="btn"><input id="file" type="file" accept="audio/*,video/*" multiple hidden>上傳音檔</label>
-</div>
 <div class="stats" id="stats"></div>
 
-<div class="bar">
-  <div class="ctrl">
-    <button id="recBtn" type="button" aria-label="開始錄音">錄音</button>
-    <div class="timer" id="timer">00:00:00</div>
-    <div style="flex:1;min-width:140px">
-      <div class="meter"><i id="lvl"></i><b id="thrMark"></b></div>
-      <div class="segprog"><i id="segp"></i></div>
+<section id="settings" hidden>
+  <div class="sethead"><h2>設定與保存</h2><span class="sp"></span><span id="setMsg" class="note">變更會自動儲存</span><button id="setClose" class="ghost" type="button">完成</button></div>
+
+  <div class="setsec">
+    <h3>連線</h3>
+    <label class="f">Groq API key（只存在這台裝置的瀏覽器）
+      <input id="key" type="password" placeholder="gsk_..." autocomplete="off">
+    </label>
+    <div class="grid2">
+      <label class="f">Groq 方案（決定速度與每次送出的量）
+        <select id="tier"><option value="free">免費方案</option><option value="dev">開發者方案（付費）</option></select>
+      </label>
+      <div style="display:flex;align-items:flex-end"><button id="testKey" type="button">測試金鑰</button></div>
     </div>
-    <button id="cutBtn" type="button" disabled>立即切段</button>
   </div>
-  <div id="live" class="live" hidden><span id="liveDot" class="dot"></span><span id="liveLab" class="note"></span><span id="liveTxt"></span></div>
-  <div id="banner" class="banner" hidden></div>
+
+  <div class="setsec">
+    <h3>辨識與修正</h3>
+    <div class="grid2">
+      <label class="f">轉錄模型
+        <select id="asr"><option value="whisper-large-v3-turbo">large-v3-turbo（快、便宜）</option><option value="whisper-large-v3">large-v3（較準、較慢）</option></select>
+      </label>
+      <label class="f">可疑段落處理
+        <select id="escalate"><option value="v3">自動換另一個模型重辨識並比對</option><option value="all">每段都用兩個模型比對（用量加倍）</option><option value="off">只標示，不重辨識</option></select>
+      </label>
+      <label class="f">語言
+        <select id="lang"><option value="zh">中文</option><option value="">自動偵測（中英混雜時）</option></select>
+      </label>
+      <label class="f">修正模型（逐段校對）
+        <select id="fixModel"><option value="openai/gpt-oss-120b">gpt-oss-120b（較準）</option><option value="openai/gpt-oss-20b">gpt-oss-20b（較快，額度另計）</option></select>
+      </label>
+      <label class="f">整理模型（整理全文）
+        <select id="orgModel"><option value="openai/gpt-oss-120b">gpt-oss-120b</option><option value="openai/gpt-oss-20b">gpt-oss-20b</option></select>
+      </label>
+    </div>
+    <label class="f">專有名詞／詞彙表（逗號或換行分隔，會提示給轉錄與修正）
+      <textarea id="vocab" placeholder="例：Groq、價格行為、停損、斐波那契"></textarea>
+    </label>
+  </div>
+
+  <div class="setsec">
+    <h3>錄音與分段</h3>
+    <div class="grid2">
+      <label class="f">分段方式
+        <select id="mode"><option value="auto">停頓自動切段</option><option value="fixed">固定長度</option></select>
+      </label>
+      <label class="f">最短／最長秒數
+        <span class="pair"><input id="minSec" type="number" min="3" max="60" value="8" aria-label="最短秒數"><input id="maxSec" type="number" min="10" max="120" value="40" aria-label="最長秒數"></span>
+      </label>
+      <label class="f">靜音門檻（音量條上的黃線）<input id="thr" type="range" min="0.002" max="0.08" step="0.001" value="0.015"></label>
+      <label class="f">錄音位元率（單聲道）
+        <select id="kbps"><option value="16">16 kbps（約 7 MB／小時）</option><option value="24">24 kbps（約 11 MB／小時）</option><option value="32">32 kbps（約 15 MB／小時）</option></select>
+      </label>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="agc">麥克風自動增益（安靜環境建議關閉，可減少幻聽）</label>
+      <label><input type="checkbox" id="webasr">錄音時同時用 Apple／瀏覽器語音辨識比對（實驗，抓幻聽用）</label>
+      <label><input type="checkbox" id="autoplay">開啟審閱時自動播放該段</label>
+    </div>
+  </div>
+
+  <div class="setsec">
+    <h3>Google Drive 同步</h3>
+    <p id="drvInfo" class="note" style="margin:0">尚未連線。</p>
+    <div class="row" style="margin:0">
+      <button id="drvConn" type="button" class="primary">連線 Google Drive</button>
+      <button id="drvSync" type="button" hidden>立即同步</button>
+      <button id="drvListBtn" type="button" hidden>從 Drive 開啟工作階段</button>
+      <button id="drvOff" type="button" hidden>中斷連線</button>
+    </div>
+    <label class="note"><input type="checkbox" id="driveAuto">自動同步（音檔、逐字稿與整理稿完成後自動上傳）</label>
+    <div id="drvList"></div>
+    <p class="note" style="margin:0">只會存取這個工具在你 Drive 裡建立的檔案。Google 授權每小時到期，到期時按一次「連線」即可，期間本機照常存檔，連線後自動補傳。</p>
+  </div>
+
+  <div class="setsec">
+    <h3>本機保存</h3>
+    <p id="stInfo" class="note" style="margin:0">讀取儲存空間中…</p>
+    <div class="row" style="margin:0">
+      <button id="persistBtn" type="button">要求永久保存</button>
+      <button id="zipOut" type="button">匯出本工作階段 ZIP</button>
+      <label class="btn"><input id="zipIn" type="file" accept=".zip,application/zip" hidden>匯入 ZIP</label>
+      <span id="delAudioWrap"><button id="delAudio" class="danger" type="button">釋放本機空間</button></span>
+    </div>
+    <p class="note" style="margin:0">音檔與文字存在這台裝置的瀏覽器裡。Safari 會清除 7 天沒開啟的網站資料，建議把本頁「加入主畫面」，並開啟 Drive 同步或定期匯出 ZIP。</p>
+  </div>
+</section>
+
+<div class="bar">
   <div class="tabs" role="tablist">
     <button data-tab="segs" class="on" type="button">逐段審閱</button>
     <button data-tab="merged" type="button">合併稿</button>
     <button data-tab="org" type="button">整理稿</button>
   </div>
-  <canvas id="tl" height="16" aria-label="段落時間軸：點一下跳到該段" hidden></canvas>
+  <div id="banner" class="banner" hidden></div>
+  <canvas id="tl" height="14" aria-label="段落時間軸：點一下跳到該段" hidden></canvas>
 </div>
 
 <section id="p-segs" class="pane">
-  <div class="row">
+  <div class="toolbar">
     <div class="seg-tabs" id="viewSw" role="tablist">
       <button type="button" data-view="list" class="on">段落</button>
       <button type="button" data-view="issues">問題清單</button>
       <button type="button" data-view="read">閱讀</button>
     </div>
-    <button id="orderBtn" type="button" title="切換排列順序"></button>
+    <button id="orderBtn" class="ghost" type="button" title="切換排列順序"></button>
     <span class="sp"></span>
     <button id="reviewBtn" class="primary" type="button">審閱待確認</button>
-  </div>
-  <div class="row">
     <div class="fchips" id="filters"></div>
   </div>
   <details class="fr">
-    <summary>進階：分章與顯示</summary>
-    <div class="row tight" style="margin-top:8px;gap:12px">
-      <label class="note">分章 <select id="chMode" style="width:auto"><option value="">不分章</option><option value="time">每 5 分鐘一章</option><option value="topic">依主題（AI 分析）</option></select></label>
-      <button id="topicBtn" type="button" hidden>重新分析主題</button>
-      <label class="note" id="collapseLbl"><input type="checkbox" id="collapseOk" checked> 收合沒問題的段落</label>
+    <summary>工具：分章、收合、全文取代</summary>
+    <div class="toolsbox">
+      <div class="row tight" style="gap:14px">
+        <label class="note">分章 <select id="chMode" style="width:auto;margin-left:4px"><option value="">不分章</option><option value="time">每 5 分鐘一章</option><option value="topic">依主題（AI 分析）</option></select></label>
+        <button id="topicBtn" type="button" hidden>重新分析主題</button>
+        <label class="note" id="collapseLbl"><input type="checkbox" id="collapseOk" checked>收合沒問題的段落</label>
+      </div>
+      <div class="frbox">
+        <input id="frFind" type="text" placeholder="尋找，例如：停順">
+        <input id="frRep" type="text" placeholder="取代為，例如：停損">
+        <button id="frGo" type="button">全部取代</button>
+      </div>
+      <div class="row tight"><label class="note"><input type="checkbox" id="frVocab" checked>取代後的詞加入詞彙表</label><span id="frCount" class="note"></span></div>
     </div>
-  </details>
-  <details class="fr">
-    <summary>全文尋找與取代（常見錯字一次修正）</summary>
-    <div class="frbox">
-      <input id="frFind" type="text" placeholder="尋找，例如：停順">
-      <input id="frRep" type="text" placeholder="取代為，例如：停損">
-      <button id="frGo" type="button">全部取代</button>
-    </div>
-    <div class="row tight" style="margin-top:6px"><label class="note"><input type="checkbox" id="frVocab" checked> 取代後的詞加入詞彙表</label><span id="frCount" class="note"></span></div>
   </details>
   <div id="segList"></div>
   <div id="issueList" hidden></div>
@@ -392,11 +441,26 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
 </section>
 </div>
 
+<div class="dock" id="dock">
+  <div class="dock-in">
+    <div id="live" class="live" hidden><span id="liveDot" class="dot"></span><span id="liveLab" class="note"></span><span id="liveTxt"></span></div>
+    <div class="ctrl">
+      <button id="recBtn" type="button" aria-label="開始錄音"></button>
+      <div class="meterwrap">
+        <div class="meterline"><span class="timer" id="timer">00:00:00</span><span class="recstate" id="recState">按紅色按鈕開始錄音</span></div>
+        <div class="meter"><i id="lvl"></i><b id="thrMark"></b></div>
+        <div class="segprog"><i id="segp"></i></div>
+      </div>
+      <button id="cutBtn" type="button" disabled title="立即切段"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg><span>切段</span></button>
+    </div>
+  </div>
+</div>
+
 <aside id="rv" class="drawer" hidden aria-label="段落審閱">
   <div class="rvhead">
     <strong id="rvTitle"></strong><span id="rvPos" class="note"></span>
     <span class="sp"></span>
-    <button id="rvClose" type="button">關閉</button>
+    <button id="rvClose" class="ghost" type="button">關閉</button>
   </div>
   <button id="rvPrevPv" class="pv" type="button" hidden></button>
   <div id="rvChips" class="rvchips"></div>
@@ -417,16 +481,16 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
     <textarea id="rvText" rows="6"></textarea>
   </label>
   <div id="rvIssues" style="display:grid;gap:8px"></div>
-  <div class="row" style="margin:0">
-    <button id="rvOk" class="primary" type="button">確認，下一段</button>
-    <button id="rvPrev" type="button">上一段</button>
-    <button id="rvNext" type="button">下一段</button>
+  <div class="rvacts">
+    <button id="rvOk" class="primary" type="button" style="grid-column:1/-1">確認，下一段待審</button>
+    <button id="rvPrev" type="button">← 上一段</button>
+    <button id="rvNext" type="button">下一段 →</button>
   </div>
-  <div class="row" style="margin:0">
-    <button id="rvRefix" type="button">重新修正</button>
-    <button id="rvV3" type="button">用 large-v3 重辨識</button>
-    <button id="rvTurbo" type="button">用 turbo 重辨識</button>
-    <button id="rvSkip" type="button">從逐字稿移除</button>
+  <div class="rvacts">
+    <button id="rvRefix" class="ghost" type="button">重新修正</button>
+    <button id="rvV3" class="ghost" type="button">用 large-v3 重辨識</button>
+    <button id="rvTurbo" class="ghost" type="button">用 turbo 重辨識</button>
+    <button id="rvSkip" class="ghost danger" type="button">從逐字稿移除</button>
   </div>
   <details id="rvMore" open>
     <summary>原始辨識、濾除內容與修改紀錄</summary>
@@ -478,6 +542,9 @@ function readForm(){
 function markThr(){ $("#thrMark").style.left = Math.min(100, Math.sqrt(Number($("#thr").value)/0.25)*100) + "%"; }
 $("#thr").addEventListener("input", markThr);
 $("#settings").addEventListener("change", () => { readForm(); $("#setMsg").textContent = "已自動儲存"; renderStats(); pump(); });
+$("#setClose").onclick = () => { $("#settings").hidden = true; };
+$("#moreMenu").addEventListener("click", e => { const b = e.target.closest("button"); if (b && b.id !== "delSess" && !b.closest(".confirm")) $("#moreMenu").open = false; });
+document.addEventListener("click", e => { const m = $("#moreMenu"); if (m.open && !m.contains(e.target)) m.open = false; });
 $("#setBtn").onclick = () => { $("#settings").hidden = !$("#settings").hidden; if(!$("#settings").hidden) storageInfo(); };
 $("#testKey").onclick = async () => {
   readForm(); $("#setMsg").textContent = "測試中…";
@@ -696,7 +763,7 @@ async function startRec(){
   liveUI();
   try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {}
   banner("mic");
-  $("#recBtn").classList.add("on"); $("#recBtn").textContent="停止"; $("#recBtn").setAttribute("aria-label","停止錄音"); $("#cutBtn").disabled=false;
+  $("#recBtn").classList.add("on"); $("#recBtn").setAttribute("aria-label","停止錄音"); $("#recState").textContent="錄音中・停頓時自動切段"; $("#recState").classList.add("on"); $("#cutBtn").disabled=false;
 }
 function stopRec(){
   if (web.on || web.r) webStop(); banner("web");
@@ -704,7 +771,7 @@ function stopRec(){
   setTimeout(() => { try { if (navigator.audioSession) navigator.audioSession.type = "auto"; } catch {} }, 300);
   rec.stream?.getTracks().forEach(t=>t.stop()); rec.ctx?.close().catch(()=>{});
   try { rec.wake?.release(); } catch {}
-  $("#recBtn").classList.remove("on"); $("#recBtn").textContent="錄音"; $("#recBtn").setAttribute("aria-label","開始錄音");
+  $("#recBtn").classList.remove("on"); $("#recBtn").setAttribute("aria-label","開始錄音"); $("#recState").textContent="已停止・按紅色按鈕繼續錄音"; $("#recState").classList.remove("on");
   $("#cutBtn").disabled=true; $("#lvl").style.width="0"; $("#segp").style.width="0";
 }
 function tick(){
@@ -1148,18 +1215,17 @@ function rowHTML(g){
   const body = t ? hlText(g) : g.web ? `<span class="prov">${esc(g.web)}</span>` : `<span class="ph">${g.status==="transcribing"?"轉錄中…":g.status.startsWith("err")?"沒有結果":"等待轉錄…"}</span>`;
   const openN = openIssues(g).length, active = !/done|skip/.test(g.status);
   return `<div class="seg${g.status==="skip"?" skip":""}${needsReview(g)?" need":""}${g.id===rvId?" cur":""}" data-id="${esc(g.id)}">
-    <div class="n">#${g.seq}<span>${clock(g.at)}</span></div>
+    <div class="n">${g.seq}<span>${clock(g.at).slice(0,5)}</span><span>${g.dur ? Number(g.dur).toFixed(0)+"s" : ""}</span></div>
     <div class="body">
       <div class="txt" tabindex="0" role="button" aria-label="審閱第 ${g.seq} 段">${body}</div>
       <div class="meta">
-        <span class="chip ${cls}">${lab}${g.tries && active ? " · 重試 "+g.tries : ""}</span>
-        ${!t && g.web ? `<span class="chip w">暫用 Apple 辨識</span>` : ""}${g.model ? `<span class="chip">${MNAME(g.model)}</span>` : ""}${confChip(g)}
+        ${g.status !== "done" ? `<span class="chip ${cls}">${lab}${g.tries && active ? " · 重試 "+g.tries : ""}</span>` : ""}
+        ${!t && g.web ? `<span class="chip w">暫用 Apple 辨識</span>` : ""}${g.lp != null && g.lp < -0.8 ? confChip(g) : ""}
         ${g.flags.map(flagChip).join("")}
         ${openN ? `<span class="chip e">待確認 ${openN}</span>` : ""}${g.orgNote ? `<span class="chip e">整理時標註</span>` : ""}
         ${g.edited ? `<span class="chip">已手改</span>` : ""}${g.reviewed && g.status!=="skip" ? `<span class="chip d">已確認</span>` : ""}
-        ${g.dur ? `<span class="chip">${Number(g.dur).toFixed(1)}s</span>` : ""}
-        ${hasAudio(g) ? `<button type="button" data-act="play">播放</button>` : g.audioLost ? `<span class="chip">音檔遺失</span>` : ""}
-        <button type="button" data-act="open">審閱</button>
+        ${g.audioLost && !hasAudio(g) ? `<span class="chip">音檔遺失</span>` : ""}
+        <span class="acts">${hasAudio(g) ? `<button type="button" data-act="play" aria-label="播放第 ${g.seq} 段">▶ 播放</button>` : ""}<button type="button" data-act="open">審閱</button></span>
         ${g.err && active ? `<span class="note err">${esc(g.err.slice(0,140))}</span>` : ""}
       </div>
     </div></div>`;
@@ -1294,12 +1360,12 @@ const tl = $("#tl");
 function drawTimeline(){
   const list = sorted(), show = !$("#p-segs").hidden && list.length > 0;
   tl.hidden = !show; if (!show) return;
-  const w = tl.clientWidth || 300, h = 16, dpr = window.devicePixelRatio || 1;
+  const w = tl.clientWidth || 300, h = 14, dpr = window.devicePixelRatio || 1;
   if (tl.width !== Math.round(w*dpr)) { tl.width = Math.round(w*dpr); tl.height = h*dpr; }
   const ctx = tl.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
   const cs = getComputedStyle(document.documentElement), col = k => cs.getPropertyValue(k).trim();
   const n = list.length, bw = w/n, gap = bw > 4 ? 1 : 0;
-  ctx.fillStyle = col("--soft"); ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = col("--sunk"); ctx.fillRect(0, 0, w, h);
   list.forEach((g,i) => {
     if (needsReview(g)) return;
     ctx.fillStyle = g.status==="done" ? col("--accent") : g.status==="skip" ? col("--line") : col("--warn");
@@ -1448,7 +1514,7 @@ $("#chMode").value = UI.ch; $("#collapseOk").checked = UI.collapse; $("#topicBtn
 $("#chMode").onchange = e => { UI.ch = e.target.value; saveUI(); $("#topicBtn").hidden = UI.ch !== "topic"; if (UI.ch === "topic" && !(cur.chapters||[]).length) analyzeTopics(); render(); };
 $("#collapseOk").onchange = e => { UI.collapse = e.target.checked; saveUI(); render(); };
 window.addEventListener("resize", () => drawTimeline());
-function orderUI(){ $("#orderBtn").textContent = UI.order === "desc" ? "最新在上 ↑" : "最新在下 ↓"; }
+function orderUI(){ $("#orderBtn").textContent = UI.order === "desc" ? "↓ 新到舊" : "↑ 舊到新"; $("#orderBtn").title = UI.order === "desc" ? "目前最新的在最上面，點一下改成最新在下" : "目前最新的在最下面，點一下改成最新在上"; }
 $("#orderBtn").onclick = () => { UI.order = UI.order === "desc" ? "asc" : "desc"; saveUI(); orderUI(); render(); };
 orderUI();
 let lastSegCount = 0;
@@ -1796,7 +1862,7 @@ async function importZip(file){
   sessions.unshift(s); await switchSession(sid);
   toast(`已匯入 ${(m.segments||[]).length} 段`); storageInfo();
 }
-$("#zipOut").onclick = exportZip; $("#zipOut2").onclick = exportZip;
+$("#zipOut").onclick = exportZip; $("#menuZip").onclick = exportZip; $("#zipOut2").onclick = exportZip;
 $("#zipIn").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (rec.on) return toast("請先停止錄音"); try { await importZip(f); } catch(err){ toast("匯入失敗：" + err.message); } };
 
 /* ================= 儲存空間 ================= */
