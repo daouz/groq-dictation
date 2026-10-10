@@ -163,6 +163,10 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
 .rs sup{font:500 10px var(--mono);color:var(--muted);margin-right:2px}
 .rs.flag{text-decoration:underline wavy var(--err);text-underline-offset:4px}
 .rs.pend{color:var(--muted)}
+.live{display:flex;gap:8px;align-items:center;margin-top:6px;font-size:13px;min-height:20px;overflow:hidden;white-space:nowrap}
+.live #liveTxt{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}
+.dot.ok{background:var(--accent)} .dot.mid{background:var(--warn)} .dot.bad{background:var(--err)}
 kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px}
 /* 手機：控制列精簡、輸入框 16px 避免 iOS 自動放大 */
 @media (max-width:600px){
@@ -257,6 +261,7 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
   <div class="checks">
     <label><input type="checkbox" id="agc"> 麥克風自動增益（安靜環境建議關閉，可減少幻聽）</label>
     <label><input type="checkbox" id="autoplay"> 開啟審閱時自動播放該段</label>
+    <label><input type="checkbox" id="webasr"> 錄音時同時用 Apple／瀏覽器語音辨識比對（實驗，抓幻聽用）</label>
   </div>
   <label class="f">專有名詞／詞彙表（逗號或換行分隔，會提示給轉錄與修正）
     <textarea id="vocab" placeholder="例：Groq、價格行為、停損、斐波那契"></textarea>
@@ -309,6 +314,7 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
     </div>
     <button id="cutBtn" type="button" disabled>立即切段</button>
   </div>
+  <div id="live" class="live" hidden><span id="liveDot" class="dot"></span><span id="liveLab" class="note"></span><span id="liveTxt"></span></div>
   <div id="banner" class="banner" hidden></div>
   <div class="tabs" role="tablist">
     <button data-tab="segs" class="on" type="button">逐段審閱</button>
@@ -441,7 +447,7 @@ const mimeOf = name => ({webm:"audio/webm",m4a:"audio/mp4",mp4:"audio/mp4",ogg:"
 
 /* ================= 設定 ================= */
 const DEF = {key:"", asr:TURBO, escalate:"v3", lang:"zh", tier:"free", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b",
-  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true};
+  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true, webasr:false};
 const S = Object.assign({}, DEF, LS.get("settings", {}));
 if (typeof S.escalate === "boolean") S.escalate = S.escalate ? "v3" : "off";
 const NUM = ["minSec","maxSec","thr","kbps"];
@@ -480,6 +486,7 @@ function drawBanner(){
   b.innerHTML = ks.map(k => `<span>${esc(banners[k])}</span>`).join("") + (paused ? '<button type="button" id="resumeBtn">繼續處理</button>' : "") + (banners.drv ? '<button type="button" id="drvRe">連線 Google Drive</button>' : "");
   const rb=$("#resumeBtn"); if(rb) rb.onclick = () => setPaused(false);
   const dr=$("#drvRe"); if(dr) dr.onclick = () => driveConnect();
+  if (banners.web && rec.on && S.webasr) { const w = document.createElement("button"); w.type = "button"; w.textContent = "重新啟動語音辨識"; w.onclick = () => webRestart(); b.append(w); }
 }
 
 /* ================= IndexedDB ================= */
@@ -568,7 +575,7 @@ async function switchSession(id){
     const g = normalize(raw);
     if (g.status==="transcribing") g.status="queued";
     if (g.status==="fixing") g.status="transcribed";
-    g.nextAt = 0;
+    g.nextAt = 0; g.webPending = false;
     if (!g.alts.length && g.raw && HALLU.test(g.raw) && !g.flags.includes("提示詞外洩")) { g.flags = [...g.flags, "提示詞外洩"]; g.asrRisk = Math.max(g.asrRisk||0, 3); g.reviewed = false; }
     computeRisk(g); segs.set(g.id, g);
   }
@@ -617,6 +624,7 @@ async function addSegment(blob, meta){
     blob:blob||null, ext:meta.ext||"webm", srcId:meta.srcId||null, start:meta.start??null, end:meta.end??null, src:meta.src||"mic",
     voiced:meta.voiced??null, status:"queued"});
   if (meta.skip) { g.status="skip"; g.text=meta.skip; }
+  if (meta.web && g.status !== "skip") { g.webPending = true; setTimeout(() => assignWeb(g), 2600); }
   segs.set(g.id, g); await saveSeg(g, true); render(); pump();
 }
 
@@ -642,6 +650,7 @@ function startRecorder(){
     const v = mr._voiced || 0;
     meta.dur = mr._dur; meta.voiced = v; meta.ext = extOf(blob.type) || rec.ext;
     if (v < 0.6) meta.skip = v < 0.2 ? "（靜音）" : "（語音太短，已略過。若有內容請按「重做」）";
+    meta.web = S.webasr && web.on;
     addSegment(blob, meta).catch(e => banner("save", "存檔失敗：" + e.message));
   };
   mr.start();
@@ -667,12 +676,16 @@ async function startRec(){
   rec.stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (rec.on) { stopRec(); banner("mic", "麥克風中斷（可能是裝置拔除或系統打斷），已停止錄音並保存目前內容。"); } });
   rec.on = true; rec.t0 = performance.now(); rec.lastTick = rec.t0; startRecorder();
   rec.iv = setInterval(tick, 50);
+  web.finals = []; web.up = []; web.restarts = []; web.lastFinal = ""; web.interim = ""; web.zeroSince = 0;
+  if (S.webasr) webStart();
+  liveUI();
   try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {}
   banner("mic");
   $("#recBtn").classList.add("on"); $("#recBtn").textContent="停止"; $("#recBtn").setAttribute("aria-label","停止錄音"); $("#cutBtn").disabled=false;
 }
 function stopRec(){
-  rec.on = false; clearInterval(rec.iv); cut();
+  if (web.on || web.r) webStop(); banner("web");
+  rec.on = false; clearInterval(rec.iv); cut(); liveUI();
   rec.stream?.getTracks().forEach(t=>t.stop()); rec.ctx?.close().catch(()=>{});
   try { rec.wake?.release(); } catch {}
   $("#recBtn").classList.remove("on"); $("#recBtn").textContent="錄音"; $("#recBtn").setAttribute("aria-label","開始錄音");
@@ -684,6 +697,7 @@ function tick(){
   const rms = Math.sqrt(sum/rec.buf.length), now = performance.now(), dt = now - rec.lastTick; rec.lastTick = now;
   $("#lvl").style.width = Math.min(100, Math.sqrt(rms/0.25)*100) + "%";
   if (rms > S.thr) { rec.lastVoice = now; rec.voiced += dt/1000; }
+  if (now - (rec.lastWatch||0) > 1000) { rec.lastWatch = now; webWatch(rms); }
   const el = (now-rec.segStart)/1000;
   $("#timer").textContent = fmtT((now-rec.t0)/1000);
   $("#segp").style.width = Math.min(100, el/S.maxSec*100) + "%";
@@ -876,6 +890,7 @@ function applyBest(g){
       if (s < 0.5) { flags.push("兩模型差異大"); risk += 2; }
       else if (s >= 0.8) { flags.push("兩模型一致"); risk = Math.max(0, risk-1); } }
   }
+  if (g.web === "" && g.raw.replace(/[\s\p{P}]/gu, "").length >= 4) { flags.push("Apple 沒聽到內容"); risk += 2; }
   g.flags = flags; g.asrRisk = risk;
 }
 
@@ -927,6 +942,7 @@ async function fixBatch(batch, noJson){
     const warn = g.flags.filter(f => !/一致/.test(f)); if (warn.length) u += "系統警示：" + warn.join("、") + "\n";
     if (g.lowParts.length) u += "低信心句：" + g.lowParts.join(" / ") + "\n";
     if (g.dropped.length) u += "已濾除（不要放回）：" + g.dropped.join(" / ") + "\n";
+    if (g.web != null) u += "Apple 辨識（準確度較低，僅供比對同音字）：" + (g.web || "（沒有聽到內容）") + "\n";
     u += "原始：" + g.raw + "\n\n";
   }
   const body = {model:S.fixModel, temperature:0.2, reasoning_effort:"low", max_completion_tokens:T.fixTok,
@@ -951,7 +967,7 @@ $("#pauseBtn").onclick = () => setPaused(!paused);
 function pickBatch(list, now){
   const T = TIER(), out = []; let chars = 0;
   for (const g of list) {
-    const ready = g.status==="transcribed" && g.nextAt <= now && !lanes.fx.busy.has(g.id);
+    const ready = g.status==="transcribed" && g.nextAt <= now && !lanes.fx.busy.has(g.id) && !g.webPending;
     if (!ready) { if (out.length && g.status!=="skip") break; continue; }
     if (g.solo) { if (!out.length) out.push(g); break; }
     if (out.length && (chars + g.raw.length > T.batch || out.length >= 4)) break;
@@ -1474,7 +1490,7 @@ function fillReview(full){
   // 原始辨識
   $("#rvAlts").innerHTML = g.alts.length ? g.alts.map(a => `<div class="alt"><div class="rvchips"><span class="chip">${MNAME(a.model)}</span>${a.lp!=null?`<span class="chip">信心 ${a.lp.toFixed(2)}</span>`:""}${a.flags.map(flagChip).join("")}${a.model===g.model?'<span class="chip d">目前採用</span>':(a.text?`<button type="button" data-alt="${esc(a.model)}">改用這版重新修正</button>`:"")}</div><div class="rawtxt">${esc(a.text) || "（沒有內容）"}</div></div>`).join("")
     + (g.agree!=null ? `<p class="note">兩模型相似度 ${(g.agree*100).toFixed(0)}%</p>` : "") : '<p class="note">還沒有辨識結果。</p>';
-  $("#rvDropped").innerHTML = g.dropped.length ? `<div class="alt"><span class="note">自動濾除的疑似幻聽（不會出現在逐字稿）</span><div class="rawtxt">${g.dropped.map(esc).join("<br>")}</div></div>` : "";
+  $("#rvDropped").innerHTML = (g.web != null || g.webPending ? `<div class="alt"><div class="rvchips"><span class="chip">Apple 辨識</span><span class="note">錄音時同步辨識，只供比對</span></div><div class="rawtxt">${g.webPending ? "比對中…" : esc(g.web) || "（Apple 沒有聽到內容）"}</div></div>` : "") + (g.dropped.length ? `<div class="alt"><span class="note">自動濾除的疑似幻聽（不會出現在逐字稿）</span><div class="rawtxt">${g.dropped.map(esc).join("<br>")}</div></div>` : "");
   $("#rvHist").innerHTML = g.history.length ? `<div class="alt"><span class="note">修改紀錄</span>${g.history.map((x,k)=>`<div class="hist"><span class="note">${clock(x.t)}</span><span class="t">${esc(x.text)}</span><button type="button" data-hist="${k}">還原</button></div>`).join("")}</div>` : "";
   $("#rvSkip").textContent = g.status==="skip" ? (g.userSkip ? "放回逐字稿" : "重新辨識這段") : "從逐字稿移除";
   $("#rvV3").disabled = $("#rvTurbo").disabled = !hasAudio(g);
@@ -1826,6 +1842,84 @@ $("#p-org").addEventListener("click", e => {
   const a = e.target.closest("a.ref"); if (!a) return; e.preventDefault();
   const g = segBySeq(+a.dataset.seq); if (g) openReview(g.id); else toast("找不到第 " + a.dataset.seq + " 段");
 });
+
+/* ================= Apple／瀏覽器語音辨識（錄音時同步比對） ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const web = {r:null, on:false, state:"off", stateAt:0, finals:[], up:[], curUp:null, restarts:[], interim:"", lastFinal:"", lastHeard:0, fatal:"", zeroSince:0};
+const wnow = () => (performance.now() - rec.t0) / 1000;
+function webSet(st){ web.state = st; web.stateAt = performance.now(); liveUI(); }
+const WEB_ERR = {"not-allowed":"沒有取得語音辨識權限（請在跳出的視窗允許，或按下方按鈕再試一次）","service-not-allowed":"系統不允許使用語音辨識（請到 iPhone 設定開啟 Siri 與聽寫）","audio-capture":"語音辨識拿不到麥克風（可能和錄音衝突）","language-not-supported":"語音辨識不支援台灣中文","network":"語音辨識需要網路連線"};
+function webStart(){
+  if (!S.webasr || !rec.on) return;
+  if (!SR) { banner("web", "這個瀏覽器不支援語音辨識（Brave 預設關閉），請改用 Safari 或 Chrome。錄音照常進行。"); return; }
+  if (web.r) return;
+  const r = new SR();
+  r.lang = "zh-TW"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+  r.onstart = () => { web.curUp = [wnow(), null]; web.up.push(web.curUp); web.lastHeard = wnow(); webSet("on"); banner("web"); };
+  r.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i], t = (res[0]?.transcript || "").trim();
+      if (res.isFinal) { if (t) { web.finals.push({t:wnow(), text:t}); web.lastFinal = t; } }
+      else interim += t;
+    }
+    web.interim = interim; web.lastHeard = wnow(); liveUI();
+  };
+  r.onerror = e => { if (WEB_ERR[e.error]) web.fatal = e.error; };
+  r.onend = () => {
+    if (web.curUp) { web.curUp[1] = wnow(); web.curUp = null; }
+    web.r = null;
+    if (!web.on || !rec.on) { webSet("off"); return; }
+    if (web.fatal) return webStop(WEB_ERR[web.fatal] || "語音辨識停止了");
+    const t = performance.now(); web.restarts = web.restarts.filter(x => t - x < 30000); web.restarts.push(t);
+    if (web.restarts.length > 6) return webStop("Apple 語音辨識在 30 秒內中斷太多次");
+    webSet("restart");
+    setTimeout(() => { if (web.on && rec.on) webStart(); }, 250);
+  };
+  web.on = true; web.fatal = "";
+  try { r.start(); web.r = r; if (web.state === "off" || web.state === "stopped") webSet("starting"); }
+  catch(e) { web.r = null; webStop("無法啟動語音辨識：" + e.message); }
+}
+function webStop(msg){
+  web.on = false;
+  try { web.r?.abort(); } catch {}
+  web.r = null; if (web.curUp) { web.curUp[1] = wnow(); web.curUp = null; }
+  webSet(msg ? "stopped" : "off");
+  if (msg) banner("web", "⚠ Apple 語音辨識已停止：" + msg + "。錄音和 Groq 轉錄不受影響。");
+}
+function webRestart(){ web.restarts = []; web.fatal = ""; banner("web"); if (!rec.on) return toast("開始錄音後才會啟動語音辨識"); web.on = true; webStart(); }
+// 每秒由 tick 呼叫：停止提示、卡住偵測、麥克風衝突偵測
+function webWatch(rms){
+  if (!S.webasr || !rec.on) return;
+  const t = wnow();
+  if (web.on && web.state !== "on" && (performance.now() - web.stateAt) > 4000) webStop("重新啟動沒有成功");
+  if (web.on && web.state === "on" && (rec.lastVoice - rec.t0) / 1000 > t - 3 && t - web.lastHeard > 25) { web.lastHeard = t; try { web.r?.stop(); } catch {} }
+  if (web.on && rms < 1e-6) { if (!web.zeroSince) web.zeroSince = t; else if (t - web.zeroSince > 4) { webStop("iPhone 無法同時錄音和語音辨識（錄音變成無聲），已關閉語音辨識以保護錄音"); S.webasr = false; LS.set("settings", S); $("#webasr").checked = false; } }
+  else web.zeroSince = 0;
+}
+function liveUI(){
+  const box = $("#live"); if (!box) return;
+  box.hidden = !(S.webasr && rec.on);
+  if (box.hidden) return;
+  const lab = {on:"Apple 辨識中", starting:"Apple 辨識啟動中…", restart:"Apple 辨識重新連線中…", stopped:"Apple 辨識已停止", off:"Apple 辨識未啟動"}[web.state] || "";
+  $("#liveDot").className = "dot " + (web.state === "on" ? "ok" : web.state === "stopped" || web.state === "off" ? "bad" : "mid");
+  $("#liveLab").textContent = lab;
+  $("#liveTxt").textContent = (web.lastFinal ? "…" + web.lastFinal.slice(-24) : "") + (web.interim ? " " + web.interim : "");
+}
+function assignWeb(g){
+  const a = g.offset, b = g.offset + (+g.dur || 0);
+  let cover = 0;
+  for (const u of web.up) { const e = u[1] ?? wnow(); cover += Math.max(0, Math.min(b, e) - Math.max(a, u[0])); }
+  if (b > a && cover / (b - a) >= 0.8) {
+    const fs = web.finals.filter(f => !f.used && f.t > a + 0.3 && f.t <= b + 2.5);
+    fs.forEach(f => f.used = true);
+    g.web = fs.map(f => f.text).join("");
+  } else g.web = null;   // 這段期間辨識沒在運作，不拿來判斷
+  g.webPending = false;
+  if (g.alts.length) applyBest(g);
+  computeRisk(g); touch(g); saveSeg(g, true); render(); if (rvId === g.id) fillReview(false); pump();
+}
+$("#webasr").addEventListener("change", e => { if (e.target.checked && !SR) toast("這個瀏覽器不支援語音辨識，請改用 Safari 或 Chrome"); if (rec.on) { if (e.target.checked) { S.webasr = true; webRestart(); } else webStop(); } liveUI(); });
 
 /* ================= Google Drive 同步 ================= */
 const CLIENT_ID = "208521973041-e1eoor06r1f6itnbd5dgdcmth3lv3ctc.apps.googleusercontent.com";
