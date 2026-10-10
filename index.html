@@ -411,7 +411,7 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
       <label class="note"><input type="checkbox" id="rvLoop"> 循環</label>
     </div>
     <p id="rvNoAudio" class="note" hidden>這段沒有保存音檔。</p>
-    <div class="row tight" style="margin-top:6px"><button id="rvListen" type="button">播放並用 Apple 聽（實驗）</button><span id="rvListenMsg" class="note"></span></div>
+    <div class="row tight" id="rvListenRow" style="margin-top:6px"><button id="rvListen" type="button">播放並用 Apple 聽（實驗）</button><span id="rvListenMsg" class="note"></span></div>
   </div>
   <label class="f">校正後文字（直接修改，自動存檔）
     <textarea id="rvText" rows="6"></textarea>
@@ -701,6 +701,7 @@ async function startRec(){
 function stopRec(){
   if (web.on || web.r) webStop(); banner("web");
   rec.on = false; clearInterval(rec.iv); cut(); liveUI();
+  setTimeout(() => { try { if (navigator.audioSession) navigator.audioSession.type = "auto"; } catch {} }, 300);
   rec.stream?.getTracks().forEach(t=>t.stop()); rec.ctx?.close().catch(()=>{});
   try { rec.wake?.release(); } catch {}
   $("#recBtn").classList.remove("on"); $("#recBtn").textContent="錄音"; $("#recBtn").setAttribute("aria-label","開始錄音");
@@ -1580,9 +1581,13 @@ $("#rvClose").onclick = closeReview;
 /* 實驗：用喇叭播放這段，同時讓 Apple／瀏覽器語音辨識從麥克風聽 */
 let pl = null;
 function plMsg(t){ $("#rvListenMsg").textContent = t; }
+// iPhone／iPad：開麥克風時 iOS 會切成通話模式（聲音改走聽筒），網頁無法改回喇叭，所以不提供
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+$("#rvListenRow").hidden = IS_IOS || !(window.SpeechRecognition || window.webkitSpeechRecognition);
+function resetAudioSession(){ try { if (navigator.audioSession) navigator.audioSession.type = "auto"; } catch {} }
 function plStop(save){
   if (!pl) return; const st = pl; pl = null;
-  try { st.r.stop(); } catch {} au.removeEventListener("ended", st.onEnd);
+  try { st.r.abort(); } catch {} au.removeEventListener("ended", st.onEnd); resetAudioSession();
   $("#rvListen").textContent = "播放並用 Apple 聽（實驗）";
   if (!save) { plMsg("已取消"); return; }
   setTimeout(() => {
