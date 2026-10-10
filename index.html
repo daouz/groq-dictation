@@ -140,6 +140,29 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:50}
 .toast.on{opacity:1}
 .confirm{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+#tl{display:block;width:100%;height:16px;margin-top:8px;border-radius:4px;cursor:pointer}
+.seg-tabs{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg-tabs button{border:none;border-radius:0;padding:5px 12px;font-size:14px;background:var(--panel)}
+.seg-tabs button+button{border-left:1px solid var(--line)}
+.seg-tabs button.on{background:var(--accent);color:var(--accent-fg)}
+.runrow button,.chhead button{width:100%;text-align:left;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;border:none;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:10px 6px;color:var(--muted)}
+.runrow button:hover,.chhead button:hover{background:var(--soft)}
+.chhead button{color:var(--fg);padding-block:12px;border-bottom:2px solid var(--line)}
+.chhead.need button{border-bottom-color:var(--err)}
+.tw{display:inline-block;width:1em;color:var(--muted)}
+.seg.flash{animation:flash 1.6s}
+@keyframes flash{0%,40%{background:color-mix(in srgb,var(--accent) 25%,transparent)}100%{background:transparent}}
+.icard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:grid;gap:6px;background:var(--panel)}
+.icard.seg-c{border-color:color-mix(in srgb,var(--err) 50%,var(--line))}
+.ihead{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ihead .ref{font:600 12px var(--mono);padding:0 6px;color:var(--accent)}
+.ictx{line-height:1.8;word-break:break-word}
+#readDoc h3{font-size:16px;margin:1.4em 0 .4em}
+.rs{cursor:pointer;border-radius:3px}
+.rs:hover{background:var(--soft)}
+.rs sup{font:500 10px var(--mono);color:var(--muted);margin-right:2px}
+.rs.flag{text-decoration:underline wavy var(--err);text-underline-offset:4px}
+.rs.pend{color:var(--muted)}
 kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 4px}
 /* 手機：控制列精簡、輸入框 16px 避免 iOS 自動放大 */
 @media (max-width:600px){
@@ -292,14 +315,30 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
     <button data-tab="merged" type="button">合併稿</button>
     <button data-tab="org" type="button">整理稿</button>
   </div>
+  <canvas id="tl" height="16" aria-label="段落時間軸：點一下跳到該段" hidden></canvas>
 </div>
 
 <section id="p-segs" class="pane">
   <div class="row">
-    <div class="fchips" id="filters"></div>
+    <div class="seg-tabs" id="viewSw" role="tablist">
+      <button type="button" data-view="list" class="on">段落</button>
+      <button type="button" data-view="issues">問題清單</button>
+      <button type="button" data-view="read">閱讀</button>
+    </div>
     <span class="sp"></span>
     <button id="reviewBtn" class="primary" type="button">審閱待確認</button>
   </div>
+  <div class="row">
+    <div class="fchips" id="filters"></div>
+  </div>
+  <details class="fr">
+    <summary>進階：分章與顯示</summary>
+    <div class="row tight" style="margin-top:8px;gap:12px">
+      <label class="note">分章 <select id="chMode" style="width:auto"><option value="">不分章</option><option value="time">每 5 分鐘一章</option><option value="topic">依主題（AI 分析）</option></select></label>
+      <button id="topicBtn" type="button" hidden>重新分析主題</button>
+      <label class="note" id="collapseLbl"><input type="checkbox" id="collapseOk" checked> 收合沒問題的段落</label>
+    </div>
+  </details>
   <details class="fr">
     <summary>全文尋找與取代（常見錯字一次修正）</summary>
     <div class="frbox">
@@ -310,6 +349,8 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
     <div class="row tight" style="margin-top:6px"><label class="note"><input type="checkbox" id="frVocab" checked> 取代後的詞加入詞彙表</label><span id="frCount" class="note"></span></div>
   </details>
   <div id="segList"></div>
+  <div id="issueList" hidden></div>
+  <div id="readDoc" class="doc" hidden></div>
 </section>
 
 <section id="p-merged" class="pane" hidden>
@@ -1042,7 +1083,7 @@ const FILTERS = {
   skip:{name:"已略過", fn:g=>g.status==="skip"}
 };
 let rq = 0;
-function render(){ if (rq) return; rq = requestAnimationFrame(() => { rq = 0; drawList(); drawFilters(); renderStats(); drawMerged(); }); }
+function render(){ if (rq) return; rq = requestAnimationFrame(() => { rq = 0; drawSegViews(); drawFilters(); renderStats(); drawMerged(); }); }
 function renderStats(){
   const c = {}; let bytes = 0; segs.forEach(g => { c[g.status] = (c[g.status]||0) + 1; if (g.blob) bytes += g.blob.size || 0; });
   const wait = (c.queued||0) + (c.transcribed||0), busyN = (c.transcribing||0) + (c.fixing||0), rv = sorted().filter(needsReview).length;
@@ -1088,25 +1129,6 @@ function rowHTML(g){
       </div>
     </div></div>`;
 }
-function drawList(){
-  const box = $("#segList"), all = sorted(), list = all.filter(FILTERS[filter].fn);
-  if (!all.length) { box.innerHTML = '<p class="empty">按紅色按鈕開始錄音，或上傳音檔。說話停頓時會自動切段送出；轉錄、幻聽檢查與修正都在背景排隊進行，錄音不用等。</p>'; return; }
-  if (!list.length) { box.innerHTML = `<p class="empty">「${FILTERS[filter].name}」目前沒有段落。</p>`; return; }
-  box.querySelectorAll(":scope > :not(.seg)").forEach(e => e.remove());
-  const have = new Map([...box.querySelectorAll(".seg")].map(el => [el.dataset.id, el]));
-  const order = [];
-  for (const g of list) {
-    let el = have.get(g.id);
-    if (!el || el._v !== g._v || el._cur !== (g.id===rvId)) {
-      const d = document.createElement("div"); d.innerHTML = rowHTML(g); const n = d.firstElementChild; n._v = g._v; n._cur = g.id===rvId;
-      if (el) el.replaceWith(n); el = n;
-    }
-    have.delete(g.id); order.push(el);
-  }
-  have.forEach(el => el.remove());
-  let prev = null;
-  for (const el of order) { if (prev ? prev.nextElementSibling !== el : box.firstElementChild !== el) { if (prev) prev.after(el); else box.prepend(el); } prev = el; }
-}
 /* 播放：先用原檔，瀏覽器不支援（例如 iPhone 錄的分段 MP4）時自動轉成 WAV */
 const wavCache = new Map();
 async function rawPlayBlob(g){
@@ -1149,8 +1171,251 @@ $("#segList").addEventListener("keydown", e => { if ((e.key==="Enter"||e.key==="
 function showTab(t){
   $$(".tabs button").forEach(x => x.classList.toggle("on", x.dataset.tab===t));
   ["segs","merged","org"].forEach(k => $("#p-"+k).hidden = k!==t);
+  drawTimeline();
 }
 $$(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+/* ================= 逐段審閱：檢視切換、收合、時間軸、問題清單、閱讀模式、分章 ================= */
+const UI = Object.assign({view:"list", ch:"", collapse:true}, LS.get("ui", {}));
+const saveUI = () => LS.set("ui", UI);
+const expanded = new Set();          // 使用者切換過的收合列／章節
+let forceShow = null;                // 時間軸跳轉時強制展開的段落
+const isOk = g => ((g.status==="done" && !needsReview(g)) || g.status==="skip") && g.id !== rvId && g.id !== forceShow;
+const fmtMin = s => s >= 60 ? `約 ${Math.round(s/60)} 分鐘` : `${Math.round(s)} 秒`;
+function chaptersOf(list){
+  if (!list.length || !UI.ch) return [{key:"", title:"", segs:list}];
+  const out = [];
+  if (UI.ch === "time") {
+    const t0 = list[0].at;
+    for (const g of list) { const i = Math.floor((g.at - t0) / 300000); let c = out[out.length-1]; if (!c || c.i !== i) { c = {i, key:"t"+i, segs:[]}; out.push(c); } c.segs.push(g); }
+    out.forEach((c, n) => c.title = `第 ${n+1} 章　${clock(c.segs[0].at).slice(0,5)}–${clock(c.segs[c.segs.length-1].at).slice(0,5)}`);
+    return out;
+  }
+  const chs = (cur.chapters || []).slice().sort((a,b) => a.start - b.start);
+  if (!chs.length) return [{key:"", title:"", segs:list}];
+  for (const g of list) {
+    let idx = -1; for (let k = 0; k < chs.length; k++) if (chs[k].start <= g.seq) idx = k;
+    let c = out[out.length-1];
+    if (!c || c.idx !== idx) { c = {idx, key:"p"+(idx<0?"0":chs[idx].start), title: idx<0 ? "開頭" : chs[idx].title, segs:[]}; out.push(c); }
+    c.segs.push(g);
+  }
+  out.forEach((c, n) => c.title = `第 ${n+1} 章　${c.title}`);
+  return out;
+}
+function segItem(g){ return {key:g.id, v:g._v + "|" + (g.id===rvId), html:() => rowHTML(g)}; }
+function buildItems(list){
+  const items = [];
+  for (const ch of chaptersOf(list)) {
+    if (ch.key) {
+      const rv = ch.segs.filter(needsReview).length, dur = ch.segs.reduce((s,g)=>s+(+g.dur||0),0);
+      const def = rv > 0 || ch.segs.some(g => g.id===forceShow || g.id===rvId);
+      const open = expanded.has("ch:"+ch.key) ? !def : def;
+      items.push({key:"ch:"+ch.key, v:[ch.title, ch.segs.length, rv, open].join("|"),
+        html:() => `<div class="chhead${rv?" need":""}"><button type="button" data-tog="ch:${esc(ch.key)}" aria-expanded="${open}"><span class="tw">${open?"▾":"▸"}</span><strong>${esc(ch.title)}</strong><span class="note">${ch.segs.length} 段 · ${fmtMin(dur)}</span>${rv?`<span class="chip e">待審 ${rv}</span>`:`<span class="chip d">無問題</span>`}</button></div>`});
+      if (!open) continue;
+    }
+    let run = [];
+    const flush = () => {
+      if (run.length >= 3 && UI.collapse && filter === "all") {
+        const r = run, k = "run:" + r[0].seq, open = expanded.has(k), a = r[0].seq, b = r[r.length-1].seq;
+        const dur = run.reduce((s,g)=>s+(+g.dur||0),0), sk = run.filter(g=>g.status==="skip").length;
+        items.push({key:k, v:[b, run.length, open].join("|"), html:() => `<div class="runrow"><button type="button" data-tog="${k}" aria-expanded="${open}"><span class="tw">${open?"▾":"▸"}</span>第 ${a}–${b} 段沒有問題<span class="note">${r.length} 段${sk?`（含 ${sk} 段略過）`:""} · ${fmtMin(dur)}</span></button></div>`});
+        if (open) run.forEach(g => items.push(segItem(g)));
+      } else run.forEach(g => items.push(segItem(g)));
+      run = [];
+    };
+    for (const g of ch.segs) { if (isOk(g)) run.push(g); else { flush(); items.push(segItem(g)); } }
+    flush();
+  }
+  return items;
+}
+function reconcile(box, items){
+  box.querySelectorAll(":scope > :not([data-k])").forEach(e => e.remove());
+  const have = new Map([...box.children].map(el => [el.dataset.k, el])), order = [];
+  for (const it of items) {
+    let el = have.get(it.key);
+    if (!el || el._v !== it.v) { const d = document.createElement("div"); d.innerHTML = it.html(); const n = d.firstElementChild; n.dataset.k = it.key; n._v = it.v; if (el) el.replaceWith(n); el = n; }
+    have.delete(it.key); order.push(el);
+  }
+  have.forEach(el => el.remove());
+  let prev = null;
+  for (const el of order) { if (prev ? prev.nextElementSibling !== el : box.firstElementChild !== el) { if (prev) prev.after(el); else box.prepend(el); } prev = el; }
+}
+function drawList(){
+  const box = $("#segList"), all = sorted(), list = all.filter(FILTERS[filter].fn);
+  if (!all.length) { box.innerHTML = '<p class="empty">按紅色按鈕開始錄音，或上傳音檔。說話停頓時會自動切段送出；轉錄、幻聽檢查與修正都在背景排隊進行，錄音不用等。</p>'; return; }
+  if (!list.length) { box.innerHTML = `<p class="empty">「${FILTERS[filter].name}」目前沒有段落。</p>`; return; }
+  reconcile(box, buildItems(list));
+}
+$("#segList").addEventListener("click", e => {
+  const t = e.target.closest("button[data-tog]"); if (!t) return;
+  const k = t.dataset.tog; expanded.has(k) ? expanded.delete(k) : expanded.add(k); drawList();
+}, true);
+
+/* 時間軸 */
+const tl = $("#tl");
+function drawTimeline(){
+  const list = sorted(), show = !$("#p-segs").hidden && list.length > 0;
+  tl.hidden = !show; if (!show) return;
+  const w = tl.clientWidth || 300, h = 16, dpr = window.devicePixelRatio || 1;
+  if (tl.width !== Math.round(w*dpr)) { tl.width = Math.round(w*dpr); tl.height = h*dpr; }
+  const ctx = tl.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  const cs = getComputedStyle(document.documentElement), col = k => cs.getPropertyValue(k).trim();
+  const n = list.length, bw = w/n, gap = bw > 4 ? 1 : 0;
+  ctx.fillStyle = col("--soft"); ctx.fillRect(0, 0, w, h);
+  list.forEach((g,i) => {
+    if (needsReview(g)) return;
+    ctx.fillStyle = g.status==="done" ? col("--accent") : g.status==="skip" ? col("--line") : col("--warn");
+    ctx.globalAlpha = g.status==="done" ? 0.55 : 1;
+    ctx.fillRect(i*bw, 3, Math.max(1, bw-gap), h-6);
+  });
+  ctx.globalAlpha = 1; ctx.fillStyle = col("--err");
+  list.forEach((g,i) => { if (needsReview(g)) ctx.fillRect(Math.min(w-3, i*bw), 0, Math.max(3, bw-gap), h); });
+  const ri = list.findIndex(g => g.id===rvId);
+  if (ri >= 0) { ctx.fillStyle = col("--fg"); ctx.fillRect(Math.min(w-3, ri*bw), h-3, Math.max(3, bw-gap), 3); }
+}
+function tlIndex(e){ const r = tl.getBoundingClientRect(), list = sorted(); return list[Math.max(0, Math.min(list.length-1, Math.floor((e.clientX - r.left) / r.width * list.length)))]; }
+tl.addEventListener("mousemove", e => { const g = tlIndex(e); if (g) tl.title = `#${g.seq} ${clock(g.at)}　${(STAT[g.status]||[g.status])[0]}${needsReview(g)?"・待審閱":""}　${(g.text||g.raw||"").slice(0,30)}`; });
+tl.addEventListener("click", e => { const g = tlIndex(e); if (g) jumpTo(g); });
+function jumpTo(g){
+  if (UI.view !== "list") setView("list");
+  if (!FILTERS[filter].fn(g)) setFilter("all");
+  forceShow = g.id; drawList();
+  const row = document.querySelector(`.seg[data-id="${CSS.escape(g.id)}"]`);
+  if (row) { row.scrollIntoView({block:"center", behavior:"smooth"}); row.classList.add("flash"); setTimeout(() => row.classList.remove("flash"), 1600); }
+  if (needsReview(g)) openReview(g.id);
+  setTimeout(() => { forceShow = null; }, 4000);
+}
+
+/* 問題清單（以問題為單位審閱） */
+function issueEntries(){
+  const out = [];
+  for (const g of sorted()) {
+    if (g.status === "skip") continue;
+    g.issues.forEach((i, k) => { if (!i.state) out.push({g, k, i}); });
+    if (needsReview(g) && !openIssues(g).length) out.push({g, seg:true});
+  }
+  return out;
+}
+const sameKey = i => i.quote + "\u0000" + (i.suggest ?? "\u0001");
+function ctxHTML(g, i){
+  const t = g.text || g.raw || "", p = t.indexOf(i.quote);
+  if (p < 0) return esc(t.slice(0, 90)) + (t.length > 90 ? "…" : "");
+  const a = Math.max(0, p-30), b = Math.min(t.length, p + i.quote.length + 30);
+  return (a > 0 ? "…" : "") + esc(t.slice(a, p)) + `<mark class="${TYPECLS[i.type]||"hl-s"}">${esc(i.quote)}</mark>` + esc(t.slice(p + i.quote.length, b)) + (b < t.length ? "…" : "");
+}
+function drawIssues(){
+  const box = $("#issueList"), ents = issueEntries();
+  const groups = new Map(); ents.forEach(x => { if (x.i && x.i.suggest != null) { const k = sameKey(x.i); groups.set(k, (groups.get(k)||0) + 1); } });
+  const nI = ents.filter(x => x.i).length, nS = ents.length - nI;
+  if (!ents.length) { box.innerHTML = '<p class="empty">沒有待處理的問題了。可以到「整理稿」整理全文。</p>'; return; }
+  box.innerHTML = `<p class="note" style="margin:0 0 8px">待處理 ${ents.length} 項：字句問題 ${nI}、整段可疑 ${nS}。處理完的項目會自動消失。</p>` + ents.map(x => {
+    const g = x.g, head = `<button type="button" class="ref" data-op="open" data-id="${esc(g.id)}">#${g.seq}</button><span class="note">${clock(g.at)}</span>`;
+    if (x.seg) {
+      const why = [...g.flags.filter(f => !/一致/.test(f)), g.orgNote && "整理時標註：" + g.orgNote, g.status.startsWith("err") && (g.err || "處理失敗")].filter(Boolean);
+      return `<div class="icard seg-c"><div class="ihead">${head}<span class="chip e">整段可疑</span>${why.map(f => `<span class="chip w">${esc(f)}</span>`).join("")}</div>
+        <div class="ictx">${esc((g.text || g.raw || "（沒有文字）").slice(0, 160))}</div>
+        <div class="row tight">${hasAudio(g)?`<button type="button" data-op="play" data-id="${esc(g.id)}">播放</button>`:""}<button type="button" data-op="ok" data-id="${esc(g.id)}">確認沒問題</button>${hasAudio(g)?`<button type="button" data-op="v3" data-id="${esc(g.id)}">用 large-v3 重辨識</button>`:""}<button type="button" data-op="skip" data-id="${esc(g.id)}">從逐字稿移除</button><button type="button" data-op="open" data-id="${esc(g.id)}">開啟段落</button></div></div>`;
+    }
+    const i = x.i, same = i.suggest != null ? (groups.get(sameKey(i)) || 1) : 1;
+    return `<div class="icard"><div class="ihead">${head}<span class="chip ${i.type==="疑似幻聽"?"e":"w"}">${esc(i.type)}</span>${i.note?`<span class="note">${esc(i.note)}</span>`:""}</div>
+      <div class="ictx">${ctxHTML(g, i)}</div>
+      ${i.suggest ? `<div class="note">建議改成「${esc(i.suggest)}」</div>` : i.suggest === "" ? `<div class="note">建議刪除</div>` : ""}
+      <div class="row tight">${i.suggest!=null?`<button type="button" class="primary" data-op="acc" data-id="${esc(g.id)}" data-k="${x.k}">${i.suggest===""?"刪除":"採用"}</button>`:""}${same>1?`<button type="button" data-op="accAll" data-id="${esc(g.id)}" data-k="${x.k}">相同的 ${same} 處一起${i.suggest===""?"刪除":"採用"}</button>`:""}${i.suggest!==""?`<button type="button" data-op="del" data-id="${esc(g.id)}" data-k="${x.k}">刪除這句</button>`:""}<button type="button" data-op="ign" data-id="${esc(g.id)}" data-k="${x.k}">保留原文</button>${hasAudio(g)?`<button type="button" data-op="play" data-id="${esc(g.id)}">播放</button>`:""}</div></div>`;
+  }).join("");
+}
+function applyIssueOp(g, k, op){
+  const i = g.issues[k]; if (!i || i.state) return;
+  if (op === "ign") { i.state = "ignored"; computeRisk(g); touch(g); saveSeg(g, true); return; }
+  const t = g.text || "", rep = op === "acc" ? (i.suggest ?? "") : "";
+  let nt = t.includes(i.quote) ? t.replace(i.quote, rep) : t;
+  nt = nt.replace(/([，。、？！：])\1+/g, "$1").replace(/^[，。、]+/, "").trim();
+  i.state = "fixed"; editText(g, nt, t); saveSeg(g, true);
+  if (rvId === g.id && document.activeElement !== ta) ta.value = nt;
+}
+$("#issueList").addEventListener("click", e => {
+  const b = e.target.closest("button[data-op]"); if (!b) return;
+  const g = segs.get(b.dataset.id); if (!g) return; const op = b.dataset.op, k = +b.dataset.k;
+  if (op === "open") return openReview(g.id);
+  if (op === "play") return playSeg(g);
+  if (op === "ok") { g.reviewed = true; g.orgNote = ""; touch(g); saveSeg(g, true); }
+  else if (op === "v3") { redo(g, V3); toast(`#${g.seq} 已排入 large-v3 重辨識`); }
+  else if (op === "skip") { g.userSkip = true; g.status = "skip"; g.reviewed = true; touch(g); saveSeg(g, true); }
+  else if (op === "accAll") { const key = sameKey(g.issues[k]); let n = 0; for (const x of issueEntries()) if (x.i && sameKey(x.i) === key) { applyIssueOp(x.g, x.k, "acc"); n++; } toast(`已套用 ${n} 處`); }
+  else applyIssueOp(g, k, op);
+  render(); if (rvId) fillReview(false);
+});
+
+/* 閱讀模式 */
+function drawRead(){
+  const box = $("#readDoc"), list = sorted().filter(g => g.status !== "skip" && (g.text || g.raw));
+  if (!list.length) { box.innerHTML = '<p class="empty">還沒有內容。</p>'; return; }
+  let html = "";
+  for (const ch of chaptersOf(list)) {
+    if (ch.key) html += `<h3>${esc(ch.title)}</h3>`;
+    let p = [], len = 0;
+    const flushP = () => { if (p.length) html += "<p>" + p.join("") + "</p>"; p = []; len = 0; };
+    for (const g of ch.segs) {
+      const t = g.text || g.raw;
+      p.push(`<span class="rs${needsReview(g)?" flag":""}${g.status!=="done"?" pend":""}" data-id="${esc(g.id)}"><sup>${g.seq}</sup>${hlText(g)}</span>`);
+      len += t.length;
+      if (len > 220 && /[。！？」]$/.test(t.trim())) flushP();
+    }
+    flushP();
+  }
+  box.innerHTML = html;
+}
+$("#readDoc").addEventListener("click", e => { const s = e.target.closest(".rs"); if (s) openReview(s.dataset.id); });
+
+/* 依主題分章（AI） */
+const TOPIC_SYS = `你是編輯。輸入是一份逐字稿的段落清單，每行開頭是段號 [#n]，後面是該段開頭的文字。請依內容把它分成主題章節。
+只輸出 JSON：{"chapters":[{"start":起始段號,"title":"12 字以內的小標"}]}
+規則：start 依序遞增，第一章的 start 是輸入中最小的段號；每章至少 3 段；主題沒有明顯改變就不要切；標題用台灣正體中文。`;
+async function analyzeTopics(){
+  readForm(); if (!S.key) return toast("請先設定 API key");
+  const list = sorted().filter(g => g.status==="done" && g.text);
+  if (list.length < 6) return toast("完成的段落還太少，多錄一些再分析");
+  const T = TIER(), per = S.tier==="dev" ? 80 : 40, lines = list.map(g => `[#${g.seq}] ${g.text.replace(/\s+/g,"").slice(0, per)}`);
+  const chunks = []; let b = "";
+  for (const l of lines) { if (b && b.length + l.length > T.org * 2) { chunks.push(b); b = ""; } b += (b ? "\n" : "") + l; }
+  if (b) chunks.push(b);
+  const btn = $("#topicBtn"); btn.disabled = true; let all = [];
+  try {
+    for (let i = 0; i < chunks.length; i++) {
+      btn.textContent = `分析主題中 ${i+1}/${chunks.length}…`;
+      const j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+        model:S.orgModel, temperature:0.2, reasoning_effort:"low", max_completion_tokens:1500, response_format:{type:"json_object"},
+        messages:[{role:"system", content:TOPIC_SYS}, {role:"user", content:chunks[i]}]})});
+      let o = {}; try { o = JSON.parse(j.choices?.[0]?.message?.content || "{}"); } catch {}
+      (o.chapters || []).forEach(c => { const s = Number(c.start); if (s && c.title) all.push({start:s, title:String(c.title).slice(0, 20)}); });
+    }
+    all = all.sort((a,b) => a.start - b.start).filter((c,i,arr) => !i || c.start !== arr[i-1].start);
+    if (!all.length) throw new Error("模型沒有回傳章節");
+    cur.chapters = all; cur.chAt = Date.now(); await put("sessions", cur); driveDirty(cur.id);
+    toast(`已分成 ${all.length} 章`); render();
+  } catch(e) { toast("主題分析失敗：" + e.message); }
+  finally { btn.disabled = false; btn.textContent = "重新分析主題"; }
+}
+$("#topicBtn").onclick = analyzeTopics;
+
+/* 檢視切換 */
+function setView(v){
+  UI.view = v; saveUI();
+  $$("#viewSw button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  $("#segList").hidden = v !== "list"; $("#issueList").hidden = v !== "issues"; $("#readDoc").hidden = v !== "read";
+  $("#filters").hidden = v !== "list"; $("#collapseLbl").hidden = v !== "list";
+  render();
+}
+$("#viewSw").addEventListener("click", e => { const b = e.target.closest("button[data-view]"); if (b) setView(b.dataset.view); });
+$("#chMode").value = UI.ch; $("#collapseOk").checked = UI.collapse; $("#topicBtn").hidden = UI.ch !== "topic";
+$("#chMode").onchange = e => { UI.ch = e.target.value; saveUI(); $("#topicBtn").hidden = UI.ch !== "topic"; if (UI.ch === "topic" && !(cur.chapters||[]).length) analyzeTopics(); render(); };
+$("#collapseOk").onchange = e => { UI.collapse = e.target.checked; saveUI(); render(); };
+window.addEventListener("resize", () => drawTimeline());
+function drawSegViews(){
+  const n = issueEntries().length; const vb = $('#viewSw button[data-view="issues"]'); if (vb) vb.textContent = n ? `問題清單 ${n}` : "問題清單";
+  if (UI.view === "list") drawList(); else if (UI.view === "issues") drawIssues(); else drawRead();
+  drawTimeline();
+}
 
 /* ================= 審閱面板 ================= */
 let rvId = null, rvUrl = "", taSnap = null;
@@ -1230,11 +1495,8 @@ $("#rvIssues").addEventListener("click", e => {
   const i = g.issues[+b.dataset.iss]; if (!i) return;
   const t = ta.value;
   if (b.dataset.op === "find") { const p = t.indexOf(i.quote); if (p >= 0) { ta.focus(); ta.setSelectionRange(p, p + i.quote.length); } else toast("文字裡找不到這段"); return; }
-  if (b.dataset.op === "ign") { i.state = "ignored"; computeRisk(g); touch(g); saveSeg(g, true); fillReview(false); render(); return; }
-  const rep = b.dataset.op === "acc" ? (i.suggest ?? "") : "";
-  let nt = t.includes(i.quote) ? t.replace(i.quote, rep) : t;
-  nt = nt.replace(/([，。、？！：])\1+/g, "$1").replace(/^[，。、]+/, "").trim();
-  i.state = "fixed"; ta.value = nt; editText(g, nt, t); fillReview(false);
+  if (g.text !== t) { editText(g, t, g.text); }
+  applyIssueOp(g, +b.dataset.iss, b.dataset.op); ta.value = g.text || ""; fillReview(false); render();
 });
 $("#rvAlts").addEventListener("click", e => {
   const b = e.target.closest("button[data-alt]"); if (!b) return; const g = segs.get(rvId); if (!g) return;
@@ -1757,7 +2019,7 @@ setInterval(() => { driveUI(); if (driveOn()) driveSync(); }, 45000);
 /* ================= 啟動 ================= */
 window.addEventListener("beforeunload", e => { if (rec.on || lanes.tx.busy.size || lanes.fx.busy.size) { e.preventDefault(); e.returnValue = ""; } });
 openDB().then(d => { db = d; return loadSessions(); }).then(() => {
-  storageInfo(); driveUI(); if (driveOn()) { drive.dirty.add(cur.id); driveSync(); }
+  setView(UI.view); storageInfo(); driveUI(); if (driveOn()) { drive.dirty.add(cur.id); driveSync(); }
   const last = cur && LS.get("lastExport_"+cur.id, 0), n = segs.size;
   if (n >= 30 && Date.now() - (last||0) > 3*86400000) banner("backup", `這個工作階段有 ${n} 段，超過 3 天沒有備份。建議到「設定與保存」匯出 ZIP。`);
 }).catch(e => toast("無法開啟本機儲存：" + e.message));
