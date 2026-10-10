@@ -411,6 +411,7 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
       <label class="note"><input type="checkbox" id="rvLoop"> 循環</label>
     </div>
     <p id="rvNoAudio" class="note" hidden>這段沒有保存音檔。</p>
+    <div class="row tight" style="margin-top:6px"><button id="rvListen" type="button">播放並用 Apple 聽（實驗）</button><span id="rvListenMsg" class="note"></span></div>
   </div>
   <label class="f">校正後文字（直接修改，自動存檔）
     <textarea id="rvText" rows="6"></textarea>
@@ -1475,7 +1476,7 @@ au.addEventListener("error", async () => {
 });
 function openReview(id){
   const g = segs.get(id); if (!g) return;
-  const changed = rvId !== id; rvId = id;
+  const changed = rvId !== id; if (changed && rvId) plStop(false); rvId = id;
   $("#rv").hidden = false; document.body.classList.add("rv-open");
   fillReview(true);
   if (changed) loadReviewAudio(g);
@@ -1484,6 +1485,7 @@ function openReview(id){
 }
 function closeReview(){
   if (!rvId) return;
+  if (typeof plStop === "function") plStop(false);
   commitTa(); rvId = null; $("#rv").hidden = true; document.body.classList.remove("rv-open");
   au.pause(); if (rvUrl) { URL.revokeObjectURL(rvUrl); rvUrl = ""; } au.removeAttribute("src"); render();
 }
@@ -1520,7 +1522,7 @@ function fillReview(full){
   // 原始辨識
   $("#rvAlts").innerHTML = g.alts.length ? g.alts.map(a => `<div class="alt"><div class="rvchips"><span class="chip">${MNAME(a.model)}</span>${a.lp!=null?`<span class="chip">信心 ${a.lp.toFixed(2)}</span>`:""}${a.flags.map(flagChip).join("")}${a.model===g.model?'<span class="chip d">目前採用</span>':(a.text?`<button type="button" data-alt="${esc(a.model)}">改用這版重新修正</button>`:"")}</div><div class="rawtxt">${esc(a.text) || "（沒有內容）"}</div></div>`).join("")
     + (g.agree!=null ? `<p class="note">兩模型相似度 ${(g.agree*100).toFixed(0)}%</p>` : "") : '<p class="note">還沒有辨識結果。</p>';
-  $("#rvDropped").innerHTML = (g.web != null || g.webPending ? `<div class="alt"><div class="rvchips"><span class="chip">Apple 辨識</span><span class="note">錄音時同步辨識，只供比對</span></div><div class="rawtxt">${g.webPending ? "比對中…" : esc(g.web) || "（Apple 沒有聽到內容）"}</div></div>` : "") + (g.dropped.length ? `<div class="alt"><span class="note">自動濾除的疑似幻聽（不會出現在逐字稿）</span><div class="rawtxt">${g.dropped.map(esc).join("<br>")}</div></div>` : "");
+  $("#rvDropped").innerHTML = (g.web != null || g.webPending ? `<div class="alt"><div class="rvchips"><span class="chip">Apple 辨識</span><span class="note">${g.webSrc === "play" ? "播放時辨識" : "錄音時同步辨識"}，只供比對</span></div><div class="rawtxt">${g.webPending ? "比對中…" : esc(g.web) || "（Apple 沒有聽到內容）"}</div></div>` : "") + (g.dropped.length ? `<div class="alt"><span class="note">自動濾除的疑似幻聽（不會出現在逐字稿）</span><div class="rawtxt">${g.dropped.map(esc).join("<br>")}</div></div>` : "");
   $("#rvHist").innerHTML = g.history.length ? `<div class="alt"><span class="note">修改紀錄</span>${g.history.map((x,k)=>`<div class="hist"><span class="note">${clock(x.t)}</span><span class="t">${esc(x.text)}</span><button type="button" data-hist="${k}">還原</button></div>`).join("")}</div>` : "";
   const all = sorted(), ix = all.findIndex(x => x.id === g.id), pv = all[ix-1], nx = all[ix+1];
   const pvTxt = x => `#${x.seq}　${(x.text || x.raw || x.web || "（沒有文字）").slice(0, 60)}`;
@@ -1575,6 +1577,41 @@ $("#rvOk").onclick = confirmSeg;
 $("#rvNext").onclick = () => { const list = sorted(), i = list.findIndex(x=>x.id===rvId); if (list[i+1]) openReview(list[i+1].id); };
 $("#rvPrev").onclick = () => { const list = sorted(), i = list.findIndex(x=>x.id===rvId); if (i > 0) openReview(list[i-1].id); };
 $("#rvClose").onclick = closeReview;
+/* 實驗：用喇叭播放這段，同時讓 Apple／瀏覽器語音辨識從麥克風聽 */
+let pl = null;
+function plMsg(t){ $("#rvListenMsg").textContent = t; }
+function plStop(save){
+  if (!pl) return; const st = pl; pl = null;
+  try { st.r.stop(); } catch {} au.removeEventListener("ended", st.onEnd);
+  $("#rvListen").textContent = "播放並用 Apple 聽（實驗）";
+  if (!save) { plMsg("已取消"); return; }
+  setTimeout(() => {
+    const g = segs.get(st.id); if (!g) return;
+    const text = st.finals.join("") + (st.interim || "");
+    if (!text) { plMsg("Apple 沒有聽到內容。可能被手機的回音消除濾掉了，試試把音量調大，或改用耳機以外的外放。"); return; }
+    g.web = text; g.webV = 2; g.webSrc = "play";
+    if (g.alts.length) applyBest(g); computeRisk(g); touch(g); saveSeg(g, true); render(); if (rvId === g.id) fillReview(false);
+    plMsg("Apple 聽到：" + text.slice(0, 60) + (text.length > 60 ? "…" : "") + "（已存成這段的 Apple 版本）");
+  }, 1200);
+}
+$("#rvListen").onclick = async () => {
+  if (pl) return plStop(false);
+  const SRc = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SRc) return plMsg("這個瀏覽器不支援語音辨識，請用 Safari 或 Chrome");
+  if (rec.on) return plMsg("錄音中無法使用，請先停止錄音");
+  const g = segs.get(rvId); if (!g || !hasAudio(g)) return plMsg("這段沒有音檔");
+  const r = new SRc(); r.lang = "zh-TW"; r.continuous = true; r.interimResults = true;
+  const st = {id:g.id, r, finals:[], interim:"", onEnd:null}; pl = st;
+  r.onresult = e => { let it = ""; for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0]?.transcript || ""; if (e.results[i].isFinal) st.finals.push(t); else it += t; } st.interim = it; plMsg("聽到：" + (st.finals.join("") + it).slice(-40)); };
+  r.onerror = e => { if (pl === st) { plMsg("語音辨識錯誤：" + e.error); plStop(false); } };
+  st.onEnd = () => plStop(true);
+  au.addEventListener("ended", st.onEnd);
+  try { r.start(); } catch(e) { pl = null; return plMsg("無法啟動語音辨識：" + e.message); }
+  $("#rvListen").textContent = "停止";
+  plMsg("聆聽中…請開喇叭、音量調大");
+  au.loop = false; au.playbackRate = 1; au.currentTime = 0;
+  setTimeout(() => au.play().catch(err => { plMsg("無法播放：" + err.message); plStop(false); }), 400);
+};
 function rvStep(d){ const list = sorted(), i = list.findIndex(x => x.id === rvId), t = list[i + d]; if (!t) return; commitTa(); openReview(t.id); $("#rv").scrollTop = 0; }
 $("#rvPrevPv").onclick = () => rvStep(-1);
 $("#rvNextPv").onclick = () => rvStep(1);
