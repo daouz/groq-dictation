@@ -510,7 +510,9 @@ async function switchSession(id){
     const g = normalize(raw);
     if (g.status==="transcribing") g.status="queued";
     if (g.status==="fixing") g.status="transcribed";
-    g.nextAt = 0; computeRisk(g); segs.set(g.id, g);
+    g.nextAt = 0;
+    if (!g.alts.length && g.raw && HALLU.test(g.raw) && !g.flags.includes("提示詞外洩")) { g.flags = [...g.flags, "提示詞外洩"]; g.asrRisk = Math.max(g.asrRisk||0, 3); g.reviewed = false; }
+    computeRisk(g); segs.set(g.id, g);
   }
   renderSessSel(); $("#segList").innerHTML=""; render(); drawOrg(); pump();
 }
@@ -571,7 +573,7 @@ function startRecorder(){
     if (v < 0.6) meta.skip = v < 0.2 ? "（靜音）" : "（語音太短，已略過。若有內容請按「重做」）";
     addSegment(blob, meta).catch(e => banner("save", "存檔失敗：" + e.message));
   };
-  mr.start(1000);
+  mr.start();
   rec.mr = mr; rec.segStart = performance.now(); rec.lastVoice = rec.segStart; rec.voiced = 0;
 }
 function cut(){
@@ -734,7 +736,7 @@ async function groq(path, init){
 }
 
 /* ================= 轉錄與幻聽偵測 ================= */
-const HALLU = /(請不吝|點贊|點讚|按讚|訂閱|轉發|打賞|字幕由|字幕製作|字幕提供|明鏡與點點|感謝觀看|謝謝觀看|謝謝收看|謝謝大家收看|Amara|中文字幕|獨播劇場|YoYo|下期再見|下次再見|本節目)/i;
+const HALLU = /(請不吝|點贊|點讚|按讚|訂閱|轉發|打賞|字幕由|字幕製作|字幕提供|明鏡與點點|感謝觀看|謝謝觀看|謝謝收看|謝謝大家收看|Amara|中文字幕|獨播劇場|YoYo|下期再見|下次再見|本節目|使用繁體字|中文錄音|台灣的中文)/i;
 const REPEAT = /(.{2,12}?)\1{3,}/;
 function joinParts(arr){ let s=""; for (const t of arr){ if (s && /[A-Za-z0-9]$/.test(s) && /^[A-Za-z0-9]/.test(t)) s+=" "; s+=t; } return s; }
 function whisperPrompt(){ const v = vocabList(); return v.length ? v.join("、").slice(0, 200) : ""; }
@@ -1075,10 +1077,32 @@ function drawList(){
   let prev = null;
   for (const el of order) { if (prev ? prev.nextElementSibling !== el : box.firstElementChild !== el) { if (prev) prev.after(el); else box.prepend(el); } prev = el; }
 }
+/* 播放：先用原檔，瀏覽器不支援（例如 iPhone 錄的分段 MP4）時自動轉成 WAV */
+const wavCache = new Map();
+async function rawPlayBlob(g){
+  if (g.blob) { const ext = g.ext || extOf(g.blob.type) || "webm"; return g.blob.type ? g.blob : new Blob([g.blob], {type:mimeOf("x." + ext)}); }
+  return (await segAudio(g)).blob;
+}
+async function wavUrl(g){
+  if (wavCache.has(g.id)) return wavCache.get(g.id);
+  const src = await rawPlayBlob(g);
+  const url = URL.createObjectURL(src.type === "audio/wav" ? src : wav16(await decodeTo16k(src)));
+  wavCache.set(g.id, url);
+  if (wavCache.size > 30) { const k = wavCache.keys().next().value; URL.revokeObjectURL(wavCache.get(k)); wavCache.delete(k); }
+  return url;
+}
 const player = new Audio(); let playerUrl = "";
 async function playSeg(g){
-  try { const a = await segAudio(g); if (playerUrl) URL.revokeObjectURL(playerUrl); playerUrl = URL.createObjectURL(a.blob); player.src = playerUrl; await player.play(); }
-  catch(e){ toast("無法播放：" + e.message); }
+  try {
+    if (wavCache.has(g.id)) { player.src = wavCache.get(g.id); await player.play(); return; }
+    if (playerUrl) URL.revokeObjectURL(playerUrl);
+    playerUrl = URL.createObjectURL(await rawPlayBlob(g)); player.src = playerUrl;
+    try { await player.play(); return; }
+    catch(e) { if (e.name === "NotAllowedError") throw e; }
+    toast("轉換音檔格式中…");
+    player.src = await wavUrl(g);
+    try { await player.play(); } catch(e) { if (e.name === "NotAllowedError") toast("已轉換完成，請再按一次播放"); else throw e; }
+  } catch(e) { toast("無法播放：" + e.message); }
 }
 $("#segList").addEventListener("click", e => {
   const row = e.target.closest(".seg"); if (!row) return;
@@ -1097,6 +1121,13 @@ $$(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 /* ================= 審閱面板 ================= */
 let rvId = null, rvUrl = "", taSnap = null;
 const ta = $("#rvText"), au = $("#rvAudio");
+au.addEventListener("error", async () => {
+  if (!au.getAttribute("src") || au._wav || !au._seg) return;
+  const g = segs.get(au._seg); if (!g) return;
+  au._wav = true; $("#rvNoAudio").hidden = false; $("#rvNoAudio").textContent = "轉換音檔格式中…";
+  try { const url = await wavUrl(g); if (au._seg !== g.id) return; au.src = url; au.playbackRate = Number($("#rvRate .on")?.dataset.rate || 1); $("#rvNoAudio").hidden = true; }
+  catch(e) { $("#rvNoAudio").textContent = "這段音檔無法播放：" + e.message; }
+});
 function openReview(id){
   const g = segs.get(id); if (!g) return;
   const changed = rvId !== id; rvId = id;
@@ -1116,8 +1147,9 @@ async function loadReviewAudio(g){
   $("#rvNoAudio").hidden = hasAudio(g); au.hidden = !hasAudio(g); $("#rvRate").hidden = !hasAudio(g);
   if (!hasAudio(g)) return;
   try {
-    const a = await segAudio(g); if (rvId !== g.id) return;
-    rvUrl = URL.createObjectURL(a.blob); au.src = rvUrl; au.playbackRate = Number($("#rvRate .on")?.dataset.rate || 1); au.loop = $("#rvLoop").checked;
+    if (wavCache.has(g.id)) { au._wav = true; au.src = wavCache.get(g.id); }
+    else { const b = await rawPlayBlob(g); if (rvId !== g.id) return; rvUrl = URL.createObjectURL(b); au._wav = false; au.src = rvUrl; }
+    au._seg = g.id; au.playbackRate = Number($("#rvRate .on")?.dataset.rate || 1); au.loop = $("#rvLoop").checked;
     if (S.autoplay) au.play().catch(()=>{});
   } catch(e){ $("#rvNoAudio").hidden = false; $("#rvNoAudio").textContent = "無法載入音檔：" + e.message; }
 }
