@@ -9,6 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
+<script src="https://accounts.google.com/gsi/client" async></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -222,13 +223,25 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-radius:4px;pad
     <span id="setMsg" class="note">變更會自動儲存</span>
   </div>
 
+  <h2 class="sub">Google Drive 同步</h2>
+  <p id="drvInfo" class="note" style="margin:0">尚未連線。</p>
+  <div class="row" style="margin:0">
+    <button id="drvConn" type="button" class="primary">連線 Google Drive</button>
+    <button id="drvSync" type="button" hidden>立即同步</button>
+    <button id="drvListBtn" type="button" hidden>從 Drive 開啟工作階段</button>
+    <button id="drvOff" type="button" hidden>中斷連線</button>
+  </div>
+  <label class="note"><input type="checkbox" id="driveAuto"> 自動同步（音檔、逐字稿與整理稿完成後自動上傳）</label>
+  <div id="drvList"></div>
+  <p class="note" style="margin:0">只會存取這個工具在你 Drive 裡建立的檔案，看不到其他內容。Google 授權每小時到期，到期時按一次「連線」即可，期間本機照常存檔，連線後自動補傳。兩台裝置同時編輯同一個工作階段時，以最後同步的為準。</p>
+
   <h2 class="sub">音檔保存</h2>
   <p id="stInfo" class="note" style="margin:0">讀取儲存空間中…</p>
   <div class="row" style="margin:0">
     <button id="persistBtn" type="button">要求永久保存</button>
     <button id="zipOut" type="button">匯出本工作階段 ZIP</button>
     <label class="btn"><input id="zipIn" type="file" accept=".zip,application/zip" hidden>匯入 ZIP</label>
-    <span id="delAudioWrap"><button id="delAudio" class="danger" type="button">刪除已確認段落的音檔</button></span>
+    <span id="delAudioWrap"><button id="delAudio" class="danger" type="button">釋放本機空間</button></span>
   </div>
   <p class="note" style="margin:0">音檔與文字都存在這台裝置的瀏覽器裡，不會上傳到其他地方。Safari 會清除 7 天沒開啟的網站資料，建議把本頁「加入主畫面」，並定期匯出 ZIP。ZIP 內含每段原始音檔、逐段校對、合併稿與整理稿，可在其他裝置匯入繼續編輯。</p>
 </section>
@@ -366,7 +379,7 @@ const mimeOf = name => ({webm:"audio/webm",m4a:"audio/mp4",mp4:"audio/mp4",ogg:"
 
 /* ================= 設定 ================= */
 const DEF = {key:"", asr:TURBO, escalate:"v3", lang:"zh", tier:"free", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b",
-  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:""};
+  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true};
 const S = Object.assign({}, DEF, LS.get("settings", {}));
 if (typeof S.escalate === "boolean") S.escalate = S.escalate ? "v3" : "off";
 const NUM = ["minSec","maxSec","thr","kbps"];
@@ -402,8 +415,9 @@ function banner(kind, msg){ if ((banners[kind]||"") === (msg||"")) return; if (m
 function drawBanner(){
   const b=$("#banner"); const ks=Object.keys(banners);
   b.hidden = !ks.length;
-  b.innerHTML = ks.map(k => `<span>${esc(banners[k])}</span>`).join("") + (paused ? '<button type="button" id="resumeBtn">繼續處理</button>' : "");
+  b.innerHTML = ks.map(k => `<span>${esc(banners[k])}</span>`).join("") + (paused ? '<button type="button" id="resumeBtn">繼續處理</button>' : "") + (banners.drv ? '<button type="button" id="drvRe">連線 Google Drive</button>' : "");
   const rb=$("#resumeBtn"); if(rb) rb.onclick = () => setPaused(false);
+  const dr=$("#drvRe"); if(dr) dr.onclick = () => driveConnect();
 }
 
 /* ================= IndexedDB ================= */
@@ -434,7 +448,7 @@ function normalize(g){
 const touch = g => { g._v = (g._v||0) + 1; };
 function saveSeg(g, now){
   clearTimeout(saveTimers[g.id]);
-  const go = () => put("segs", g).then(()=>banner("quota")).catch(e => {
+  const go = () => put("segs", g).then(()=>{ banner("quota"); driveDirty(g.sid); }).catch(e => {
     if (e && e.name === "QuotaExceededError") banner("quota", "儲存空間已滿：請匯出 ZIP 後刪除舊的工作階段或音檔。");
     else console.error(e);
   });
@@ -452,7 +466,7 @@ function needsReview(g){
   if (g.status!=="done") return false;
   return g.risk>=2 || openIssues(g).length>0 || !!g.orgNote;
 }
-const hasAudio = g => !!(g.blob || g.srcId);
+const hasAudio = g => !!(g.blob || g.srcId || g.driveAudioId);
 
 /* ================= 工作階段 ================= */
 async function loadSessions(){
@@ -485,7 +499,7 @@ $("#newSess").onclick = async () => { if (rec.on) return toast("請先停止錄�
 $("#renSess").onclick = () => {
   const sel=$("#sessSel"); const inp=document.createElement("input"); inp.type="text"; inp.id="renInput"; inp.value=cur.name;
   sel.replaceWith(inp); inp.focus(); inp.select(); let done=false;
-  const finish = async save => { if(done) return; done=true; if(save){ cur.name = inp.value.trim()||cur.name; await put("sessions",cur); } inp.replaceWith(sel); renderSessSel(); };
+  const finish = async save => { if(done) return; done=true; if(save){ cur.name = inp.value.trim()||cur.name; await put("sessions",cur); driveDirty(cur.id); } inp.replaceWith(sel); renderSessSel(); };
   inp.onkeydown = e => { if(e.key==="Enter") finish(true); if(e.key==="Escape") finish(false); };
   inp.onblur = () => finish(true);
 };
@@ -631,7 +645,7 @@ function splitPCM(pcm){
 let pcmCache = {id:null, p:null};
 function getPCM(id){
   if (pcmCache.id !== id) {
-    const p = (async () => { const s = await getOne("sources", id); if (!s) throw new Error("找不到原始音檔"); return decodeTo16k(s.blob); })();
+    const p = (async () => { const s = await getOne("sources", id); if (!s) throw new Error("找不到原始音檔"); return decodeTo16k(s.blob || (s.driveId ? await driveBlob(s.driveId, s.type) : null) || (()=>{ throw new Error("原始音檔不在本機，請連線 Google Drive"); })()); })();
     pcmCache = {id, p};
     p.catch(() => { if (pcmCache.id===id) pcmCache = {id:null, p:null}; });
   }
@@ -646,6 +660,11 @@ async function segAudio(g){
   if (g.srcId) {
     const pcm = await getPCM(g.srcId);
     return {blob: wav16(pcm.subarray(Math.floor((g.start||0)*16000), Math.min(pcm.length, Math.ceil((g.end||0)*16000)))), ext:"wav"};
+  }
+  if (g.driveAudioId) {
+    const ext = g.ext || "webm", b = await driveBlob(g.driveAudioId, mimeOf("x." + ext));
+    if (GROQ_OK.includes(ext)) return {blob:b, ext};
+    return {blob: wav16(await decodeTo16k(b)), ext:"wav"};
   }
   throw Object.assign(new Error("這段沒有保存音檔"), {noAudio:true});
 }
@@ -866,6 +885,7 @@ function pump(){
 }
 function handleErr(g, e, lane){
   g.status = lane==="tx" ? "queued" : "transcribed"; g.err = e.message;
+  if (e.drive) { g.nextAt = Date.now() + 30000; if (lane==="tx") lanes.tx.until = Date.now() + 30000; driveUI(); return; }
   if (e.status===401 || e.status===403) { setPaused(true, "API key 無效或沒有權限。請到「設定與保存」檢查後按「繼續處理」。錄音與存檔照常進行。", "key"); return; }
   if (e.status===429) {
     const L = lanes[lane]; L.hits++;
@@ -981,8 +1001,10 @@ function renderStats(){
     rv ? `<button type="button" class="chip e" id="statRv">待審閱 ${rv}</button>` : "",
     bytes ? `<span class="chip">音檔 ${MB(bytes)}</span>` : "",
     paused ? `<span class="chip w">已暫停</span>` : "",
-    !S.key ? `<span class="chip e">尚未設定 API key</span>` : ""
+    !S.key ? `<span class="chip e">尚未設定 API key</span>` : "",
+    '<span class="chip" id="drvChip" hidden></span>'
   ].join("");
+  driveUI();
   const b = $("#statRv"); if (b) b.onclick = () => { setFilter("review"); showTab("segs"); };
 }
 function setFilter(f){ filter = f; drawFilters(); drawList(); }
@@ -1316,13 +1338,13 @@ async function storageInfo(){
 }
 $("#persistBtn").onclick = async () => { let ok = false; try { ok = await navigator.storage?.persist?.(); } catch {} toast(ok ? "已設為永久保存" : "瀏覽器沒有同意。請把本頁加入主畫面或書籤後再試。"); storageInfo(); };
 function delAudioHandler(){
-  const n = [...segs.values()].filter(g => g.blob && g.reviewed).length;
-  if (!n) return toast("沒有已確認且含音檔的段落");
-  $("#delAudioWrap").innerHTML = `<span class="confirm">刪除 ${n} 段已確認段落的音檔？刪除後無法重辨識。建議先匯出 ZIP。<button class="danger" id="yesDA" type="button">確定刪除</button><button id="noDA" type="button">取消</button></span>`;
+  const n = [...segs.values()].filter(g => g.blob && g.driveAudioId).length;
+  if (!n) return toast("沒有已備份到 Google Drive 的音檔。只有備份到 Drive 的音檔才能從本機刪除。");
+  $("#delAudioWrap").innerHTML = `<span class="confirm">從這台裝置刪除 ${n} 段已備份到 Drive 的音檔？之後播放或重辨識會從 Drive 讀取。<button class="danger" id="yesDA" type="button">確定刪除</button><button id="noDA" type="button">取消</button></span>`;
   $("#noDA").onclick = resetDA;
-  $("#yesDA").onclick = async () => { for (const g of segs.values()) if (g.blob && g.reviewed) { g.blob = null; touch(g); await saveSeg(g, true); } resetDA(); render(); storageInfo(); toast(`已刪除 ${n} 段音檔`); };
+  $("#yesDA").onclick = async () => { for (const g of segs.values()) if (g.blob && g.driveAudioId) { g.blob = null; touch(g); await saveSeg(g, true); } resetDA(); render(); storageInfo(); driveUI(); toast(`已釋放 ${n} 段音檔`); };
 }
-function resetDA(){ $("#delAudioWrap").innerHTML = '<button id="delAudio" class="danger" type="button">刪除已確認段落的音檔</button>'; $("#delAudio").onclick = delAudioHandler; }
+function resetDA(){ $("#delAudioWrap").innerHTML = '<button id="delAudio" class="danger" type="button">釋放本機空間</button>'; $("#delAudio").onclick = delAudioHandler; }
 $("#delAudio").onclick = delAudioHandler;
 
 /* ================= 整理全文 ================= */
@@ -1422,7 +1444,7 @@ $("#orgBtn").onclick = async () => {
     cur.organized = final; cur.orgItems = items; cur.orgAt = Date.now();
     segs.forEach(g => { if (g.orgNote) { g.orgNote = ""; computeRisk(g); touch(g); saveSeg(g); } });
     for (const x of items) { const g = segBySeq(x.seq); if (!g) continue; g.orgNote = [x.type, x.quote && "「"+x.quote+"」", x.reason, x.suggest && "建議："+x.suggest].filter(Boolean).join("　"); g.reviewed = false; touch(g); saveSeg(g, true); }
-    await put("sessions", cur); drawOrg(); render();
+    await put("sessions", cur); driveDirty(cur.id); drawOrg(); render();
     $("#orgMsg").textContent = `完成（${clock(Date.now())}），待確認 ${items.length} 項` + (pending ? `；另有 ${pending} 段仍在處理，完成後可再整理一次` : "");
   } catch(e) { $("#orgMsg").textContent = "整理失敗：" + e.message; }
   finally { btn.disabled = false; }
@@ -1456,10 +1478,199 @@ $("#p-org").addEventListener("click", e => {
   const g = segBySeq(+a.dataset.seq); if (g) openReview(g.id); else toast("找不到第 " + a.dataset.seq + " 段");
 });
 
+/* ================= Google Drive 同步 ================= */
+const CLIENT_ID = "208521973041-e1eoor06r1f6itnbd5dgdcmth3lv3ctc.apps.googleusercontent.com";
+const SCOPE = "https://www.googleapis.com/auth/drive.file";
+const FOLDER = "application/vnd.google-apps.folder";
+const ROOT_NAME = "Groq 連續聽寫";
+const drive = {token:"", exp:0, email:LS.get("driveEmail",""), busy:false, dirty:new Set(), last:0, err:"", rootOk:"", t:0, cache:new Map()};
+(() => { const t = LS.get("driveTok", null); if (t && t.exp > Date.now() + 60000) { drive.token = t.token; drive.exp = t.exp; } })();
+let tokenClient = null;
+const driveOn = () => !!drive.token && Date.now() < drive.exp;
+const driveWanted = () => !!LS.get("driveWanted", false);
+function driveErr(m, status){ const e = new ApiErr(m, status); e.drive = true; return e; }
+async function dapi(url, init = {}){
+  if (!driveOn()) throw driveErr("需要連線 Google Drive", 401);
+  let r;
+  try { r = await fetch(url.startsWith("http") ? url : "https://www.googleapis.com/drive/v3/" + url, {...init, headers:{Authorization:"Bearer " + drive.token, ...(init.headers||{})}}); }
+  catch { throw driveErr("網路連線失敗", 0); }
+  if (r.status === 401) { drive.exp = 0; LS.set("driveTok", null); driveUI(); throw driveErr("Google 授權已到期", 401); }
+  if (!r.ok) { let m = "Drive HTTP " + r.status; try { m = (await r.json()).error?.message || m; } catch {} throw driveErr(m, r.status); }
+  return r;
+}
+const qs = s => encodeURIComponent(s);
+async function dFind(query, fields = "files(id,name,modifiedTime,appProperties,size)"){
+  const r = await dapi(`files?q=${qs(query)}&fields=${qs(fields)}&orderBy=modifiedTime%20desc&pageSize=200&spaces=drive`);
+  return (await r.json()).files || [];
+}
+async function dFolder(name, parent, props){
+  const r = await dapi("files?fields=id", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name, mimeType:FOLDER, parents:[parent], appProperties:props||{}})});
+  return (await r.json()).id;
+}
+async function dUpload(meta, blob, fileId){
+  const type = blob.type || "application/octet-stream", path = fileId ? "/" + fileId : "", method = fileId ? "PATCH" : "POST";
+  if (blob.size > 4.5*1048576) {
+    const r = await dapi(`https://www.googleapis.com/upload/drive/v3/files${path}?uploadType=resumable&fields=id`, {method, headers:{"Content-Type":"application/json; charset=UTF-8", "X-Upload-Content-Type":type}, body:JSON.stringify(fileId ? {} : meta)});
+    const loc = r.headers.get("Location");
+    if (loc) { const r2 = await dapi(loc, {method:"PUT", headers:{"Content-Type":type}, body:blob}); return (await r2.json()).id; }
+  }
+  const b = "gd" + Math.random().toString(36).slice(2);
+  const body = new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(fileId ? {} : meta)}\r\n--${b}\r\nContent-Type: ${type}\r\n\r\n`, blob, `\r\n--${b}--`]);
+  const r = await dapi(`https://www.googleapis.com/upload/drive/v3/files${path}?uploadType=multipart&fields=id`, {method, headers:{"Content-Type":"multipart/related; boundary=" + b}, body});
+  return (await r.json()).id;
+}
+async function driveBlob(id, type){
+  if (drive.cache.has(id)) return drive.cache.get(id);
+  const b = await (await dapi(`files/${id}?alt=media`)).blob();
+  const out = type ? new Blob([b], {type}) : b;
+  drive.cache.set(id, out); if (drive.cache.size > 40) drive.cache.delete(drive.cache.keys().next().value);
+  return out;
+}
+async function dRoot(){
+  let id = LS.get("driveRoot", "");
+  if (id && drive.rootOk === id) return id;
+  if (id) { try { const j = await (await dapi(`files/${id}?fields=id,trashed`)).json(); if (!j.trashed) { drive.rootOk = id; return id; } } catch(e) { if (e.status !== 404) throw e; } }
+  const f = await dFind(`name='${ROOT_NAME}' and mimeType='${FOLDER}' and 'root' in parents and trashed=false`);
+  id = f[0]?.id || await dFolder(ROOT_NAME, "root", {gdRoot:"1"});
+  LS.set("driveRoot", id); drive.rootOk = id; return id;
+}
+async function dSessFolder(sess){
+  if (sess.driveFolder) return sess.driveFolder;
+  const root = await dRoot();
+  const f = await dFind(`'${root}' in parents and mimeType='${FOLDER}' and appProperties has { key='gdSid' and value='${sess.id}' } and trashed=false`);
+  sess.driveFolder = f[0]?.id || await dFolder(sess.name, root, {gdSid:sess.id});
+  sess.driveFolderName = sess.name; await put("sessions", sess);
+  return sess.driveFolder;
+}
+async function dPutFile(sess, key, name, blob){
+  sess.driveFiles = sess.driveFiles || {};
+  const meta = {name, parents:[sess.driveFolder], appProperties:{gdFile:key}};
+  let id = sess.driveFiles[key];
+  try { id = await dUpload(meta, blob, id); }
+  catch(e) { if (id && e.status === 404) id = await dUpload(meta, blob); else throw e; }
+  if (sess.driveFiles[key] !== id) { sess.driveFiles[key] = id; await put("sessions", sess); }
+}
+async function sessionMeta(sess, list, srcs){
+  return {format:"groq-dictation", version:2, exported:new Date().toISOString(), session:sess,
+    segments:list.map(g => { const {blob, _v, ...r} = g; return r; }),
+    sources:srcs.map(s => ({id:s.id, name:s.name, type:s.type, driveId:s.driveId||null}))};
+}
+function driveDirty(sid){
+  if (!sid) return; drive.dirty.add(sid);
+  clearTimeout(drive.t); drive.t = setTimeout(() => driveSync(), 20000);
+}
+async function driveSync(force){
+  if (drive.busy || !cur || !db) return;
+  if (!driveOn()) { driveUI(); return; }
+  if (!S.driveAuto && !force) { driveUI(); return; }
+  drive.busy = true; drive.err = ""; driveUI();
+  const sess = cur;
+  try {
+    const folder = await dSessFolder(sess);
+    if (sess.driveFolderName !== sess.name) {
+      await dapi(`files/${folder}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:sess.name})});
+      sess.driveFolderName = sess.name; await put("sessions", sess);
+    }
+    let changed = false;
+    for (const s of await bySid("sources", sess.id)) {
+      if (s.blob && !s.driveId) { s.driveId = await dUpload({name:"原始_" + s.name, parents:[folder], appProperties:{gdSrc:s.id}}, s.blob); await put("sources", s); changed = true; }
+    }
+    for (const g of sorted()) {
+      if (cur !== sess) break;
+      if (g.blob && !g.driveAudioId) {
+        const ext = g.ext || extOf(g.blob.type) || "webm";
+        g.driveAudioId = await dUpload({name:`${String(g.seq).padStart(4,"0")}.${ext}`, parents:[folder], appProperties:{gdSeq:String(g.seq)}}, g.blob);
+        await put("segs", g); changed = true; driveUI();
+      }
+    }
+    if (changed) drive.dirty.add(sess.id);
+    if (cur === sess && (drive.dirty.has(sess.id) || force)) {
+      drive.dirty.delete(sess.id);
+      const meta = await sessionMeta(sess, sorted(), await bySid("sources", sess.id));
+      await dPutFile(sess, "json", "session.json", new Blob([JSON.stringify(meta, null, 1)], {type:"application/json"}));
+      await dPutFile(sess, "merged", "合併稿.txt", new Blob([mergedText()], {type:"text/plain"}));
+      if (sess.organized) await dPutFile(sess, "org", "整理稿.md", new Blob([sess.organized], {type:"text/markdown"}));
+    }
+    drive.last = Date.now();
+  } catch(e) {
+    drive.err = e.message; drive.dirty.add(sess.id);
+  } finally { drive.busy = false; driveUI(); }
+}
+function driveConnect(){
+  if (!window.google?.accounts?.oauth2) return toast("Google 登入元件還在載入，請幾秒後再按一次");
+  if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID, scope:SCOPE, callback:onToken,
+    error_callback:e => toast("Google 登入沒有完成：" + (e?.message || e?.type || "已取消"))});
+  const opt = {prompt: LS.get("driveConsent", false) ? "" : "consent"};
+  if (drive.email) opt.login_hint = drive.email;
+  tokenClient.requestAccessToken(opt);
+}
+async function onToken(r){
+  if (r.error) return toast("Google 授權失敗：" + r.error);
+  if (google.accounts.oauth2.hasGrantedAllScopes && !google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)) return toast("沒有勾選 Google Drive 權限，請重新連線並允許");
+  drive.token = r.access_token; drive.exp = Date.now() + (Number(r.expires_in || 3600) - 120) * 1000;
+  LS.set("driveTok", {token:drive.token, exp:drive.exp}); LS.set("driveConsent", true); LS.set("driveWanted", true);
+  try { const a = await (await dapi("about?fields=user(emailAddress)")).json(); drive.email = a.user?.emailAddress || ""; LS.set("driveEmail", drive.email); } catch {}
+  banner("drv"); toast("已連線 Google Drive");
+  if (cur) drive.dirty.add(cur.id);
+  lanes.tx.until = 0; pump(); driveSync(true);
+}
+function driveOff(){
+  try { if (drive.token) google.accounts.oauth2.revoke(drive.token, () => {}); } catch {}
+  drive.token = ""; drive.exp = 0; LS.set("driveTok", null); LS.set("driveWanted", false); banner("drv"); driveUI(); toast("已中斷 Google Drive");
+}
+function drivePending(){ let n = 0; segs.forEach(g => { if (g.blob && !g.driveAudioId) n++; }); return n; }
+function driveUI(){
+  const on = driveOn(), pend = drivePending();
+  const info = $("#drvInfo");
+  if (info) info.textContent = on
+    ? `已連線${drive.email ? "：" + drive.email : ""}。${drive.busy ? "同步中…" : pend ? `待上傳音檔 ${pend} 段。` : "音檔都已上傳。"}${drive.last ? " 上次同步 " + clock(drive.last) + "。" : ""}${drive.err ? " 錯誤：" + drive.err : ""}`
+    : driveWanted() ? "Google 授權每小時到期，請按「連線 Google Drive」重新連線。本機資料不受影響，連線後會自動補傳。" : "尚未連線。連線後，每個工作階段會在你的 Drive「" + ROOT_NAME + "」資料夾裡自動備份音檔、逐字稿與整理稿。";
+  const set = (id, v) => { const el = $(id); if (el) el.hidden = !v; };
+  set("#drvConn", !on); set("#drvSync", on); set("#drvListBtn", on); set("#drvOff", on || driveWanted());
+  if (driveWanted() && !on) banner("drv", "Google Drive 需要重新連線才能繼續同步（本機照常存檔）。"); else banner("drv");
+  const chip = $("#drvChip");
+  if (chip) { chip.hidden = !(on || driveWanted()); chip.textContent = !on ? "Drive 未連線" : drive.busy ? "Drive 同步中" : drive.err ? "Drive 同步失敗" : pend ? `Drive 待上傳 ${pend}` : "Drive 已同步"; chip.className = "chip " + (!on || drive.err ? "e" : drive.busy || pend ? "t" : "d"); }
+}
+async function driveListSessions(){
+  const box = $("#drvList"); box.innerHTML = '<p class="note">讀取中…</p>';
+  try {
+    const root = await dRoot();
+    const fs = await dFind(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`);
+    box.innerHTML = fs.length ? fs.map(f => { const sid = f.appProperties?.gdSid; const local = sessions.some(s => s.id === sid);
+      return `<div class="hist"><span class="t" style="color:var(--fg)">${esc(f.name)}</span><span class="note">${new Date(f.modifiedTime).toLocaleString("zh-TW",{hour12:false})}</span><button type="button" data-dopen="${esc(f.id)}">${local ? "切換到這個" : "開啟"}</button></div>`; }).join("")
+      : '<p class="note">Drive 上還沒有工作階段。</p>';
+  } catch(e) { box.innerHTML = `<p class="note err">${esc(e.message)}</p>`; }
+}
+async function driveOpen(fid){
+  if (rec.on) return toast("請先停止錄音");
+  const f = await dFind(`'${fid}' in parents and name='session.json' and trashed=false`, "files(id)");
+  if (!f.length) throw new Error("這個資料夾裡沒有 session.json");
+  const m = await (await dapi(`files/${f[0].id}?alt=media`)).json();
+  if (m.format !== "groq-dictation" || !m.session?.id) throw new Error("格式不符");
+  const sid = m.session.id;
+  if (sessions.some(s => s.id === sid)) { await switchSession(sid); toast("本機已有這個工作階段，已直接開啟（以本機內容為準）"); return; }
+  const s = {...m.session, driveFolder:fid};
+  await put("sessions", s);
+  for (const src of m.sources || []) await put("sources", {id:src.id, sid, name:src.name, type:src.type, blob:null, driveId:src.driveId || null});
+  for (const r of m.segments || []) {
+    const g = normalize({...r, sid, blob:null});
+    if (g.status === "transcribing") g.status = "queued"; if (g.status === "fixing") g.status = "transcribed";
+    await put("segs", g);
+  }
+  sessions.unshift(s); await switchSession(sid);
+  toast(`已從 Drive 開啟 ${(m.segments||[]).length} 段，音檔會在播放或重辨識時從 Drive 讀取`);
+}
+$("#drvConn").onclick = driveConnect;
+$("#drvOff").onclick = driveOff;
+$("#drvSync").onclick = () => { if (cur) drive.dirty.add(cur.id); driveSync(true); };
+$("#drvListBtn").onclick = driveListSessions;
+$("#drvList").addEventListener("click", async e => { const b = e.target.closest("button[data-dopen]"); if (!b) return; b.disabled = true; try { await driveOpen(b.dataset.dopen); driveListSessions(); } catch(err) { toast("開啟失敗：" + err.message); b.disabled = false; } });
+setInterval(() => { driveUI(); if (driveOn()) driveSync(); }, 45000);
+
 /* ================= 啟動 ================= */
 window.addEventListener("beforeunload", e => { if (rec.on || lanes.tx.busy.size || lanes.fx.busy.size) { e.preventDefault(); e.returnValue = ""; } });
 openDB().then(d => { db = d; return loadSessions(); }).then(() => {
-  storageInfo();
+  storageInfo(); driveUI(); if (driveOn()) { drive.dirty.add(cur.id); driveSync(); }
   const last = cur && LS.get("lastExport_"+cur.id, 0), n = segs.size;
   if (n >= 30 && Date.now() - (last||0) > 3*86400000) banner("backup", `這個工作階段有 ${n} 段，超過 3 天沒有備份。建議到「設定與保存」匯出 ZIP。`);
 }).catch(e => toast("無法開啟本機儲存：" + e.message));
