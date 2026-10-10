@@ -451,10 +451,27 @@ function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-
   r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>toast("請關閉其他開著本工具的分頁後重新整理"); }); }
 function req(store, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(store,mode); const q=fn(t.objectStore(store));
   t.oncomplete=()=>res(q ? q.result : undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error || new Error("儲存被中止")); }); }
-const put = (s,v) => req(s,"readwrite",o=>o.put(v));
-const getAll = s => req(s,"readonly",o=>o.getAll());
-const getOne = (s,k) => req(s,"readonly",o=>o.get(k));
-const bySid = (s,sid) => req(s,"readonly",o=>o.index("sid").getAll(sid));
+/* 音檔以 ArrayBuffer 存進 IndexedDB：Safari 存 Blob 在重新整理後常讀不出來（NotFoundError） */
+const AUDIO_STORES = ["segs","sources"];
+async function put(s, v){
+  if (!AUDIO_STORES.includes(s) || !v) return req(s,"readwrite",o=>o.put(v));
+  const {_ab, _abFrom, blob, ...r} = v;
+  if (blob instanceof Blob) {
+    if (!v._ab || v._abFrom !== blob) {
+      try { v._ab = await blob.arrayBuffer(); v._abFrom = blob; }
+      catch { v.blob = null; v._ab = null; v._abFrom = null; v.audioLost = true; r.audioLost = true; r.blob = null; return req(s,"readwrite",o=>o.put(r)); }
+    }
+    r.blob = null; r.ab = v._ab; r.abType = blob.type || "";
+  } else r.blob = null;
+  return req(s,"readwrite",o=>o.put(r));
+}
+function hydrate(r){
+  if (r && r.ab) { r.blob = new Blob([r.ab], {type:r.abType || ""}); r._ab = r.ab; r._abFrom = r.blob; delete r.ab; delete r.abType; }
+  return r;
+}
+const getAll = async s => { const a = await req(s,"readonly",o=>o.getAll()); return AUDIO_STORES.includes(s) ? a.map(hydrate) : a; };
+const getOne = async (s,k) => { const r = await req(s,"readonly",o=>o.get(k)); return AUDIO_STORES.includes(s) ? hydrate(r) : r; };
+const bySid = async (s,sid) => { const a = await req(s,"readonly",o=>o.index("sid").getAll(sid)); return AUDIO_STORES.includes(s) ? a.map(hydrate) : a; };
 const delKey = (s,k) => req(s,"readwrite",o=>o.delete(k));
 
 /* ================= 狀態 ================= */
@@ -515,6 +532,16 @@ async function switchSession(id){
     computeRisk(g); segs.set(g.id, g);
   }
   renderSessSel(); $("#segList").innerHTML=""; render(); drawOrg(); pump();
+  migrateAudio(id);
+}
+async function migrateAudio(sid){
+  let lost = 0, fixed = 0;
+  for (const g of sorted()) {
+    if (cur?.id !== sid) return;
+    if (g.blob && !g._ab) { await put("segs", g); if (g.audioLost) { lost++; touch(g); computeRisk(g); } else fixed++; }
+  }
+  for (const src of await bySid("sources", sid)) if (src.blob && !src._ab) await put("sources", src);
+  if (lost) { render(); banner("lost", `有 ${lost} 段舊錄音的音檔在這個瀏覽器裡已經讀不出來（Safari 的儲存問題），文字仍保留。新錄的音檔已改用穩定的方式保存。`); }
 }
 function renderSessSel(){ $("#sessSel").innerHTML = sessions.map(s=>`<option value="${esc(s.id)}" ${cur&&s.id===cur.id?"selected":""}>${esc(s.name)}</option>`).join(""); }
 $("#sessSel").onchange = e => switchSession(e.target.value);
@@ -1052,7 +1079,7 @@ function rowHTML(g){
         ${openN ? `<span class="chip e">待確認 ${openN}</span>` : ""}${g.orgNote ? `<span class="chip e">整理時標註</span>` : ""}
         ${g.edited ? `<span class="chip">已手改</span>` : ""}${g.reviewed && g.status!=="skip" ? `<span class="chip d">已確認</span>` : ""}
         ${g.dur ? `<span class="chip">${Number(g.dur).toFixed(1)}s</span>` : ""}
-        ${hasAudio(g) ? `<button type="button" data-act="play">播放</button>` : ""}
+        ${hasAudio(g) ? `<button type="button" data-act="play">播放</button>` : g.audioLost ? `<span class="chip">音檔遺失</span>` : ""}
         <button type="button" data-act="open">審閱</button>
         ${g.err && active ? `<span class="note err">${esc(g.err.slice(0,140))}</span>` : ""}
       </div>
@@ -1341,7 +1368,7 @@ async function exportZip(){
   if (!cur) return;
   toast("打包中…");
   const pad = n => String(n).padStart(4, "0"), files = [], list = sorted();
-  const segsMeta = list.map(g => { const {blob, _v, ...r} = g; r.audioFile = blob ? `audio/${pad(g.seq)}.${g.ext||extOf(blob.type)||"webm"}` : null; return r; });
+  const segsMeta = list.map(g => { const {blob, _v, _ab, _abFrom, ...r} = g; r.audioFile = blob ? `audio/${pad(g.seq)}.${g.ext||extOf(blob.type)||"webm"}` : null; return r; });
   const srcs = await bySid("sources", cur.id);
   const srcMeta = srcs.map(s => ({id:s.id, name:s.name, type:s.type, file:`sources/${s.id}.${(s.name.split(".").pop()||"bin").toLowerCase()}`}));
   files.push({name:"session.json", data:JSON.stringify({format:"groq-dictation", version:2, exported:new Date().toISOString(), session:cur, segments:segsMeta, sources:srcMeta}, null, 1)});
@@ -1605,7 +1632,7 @@ async function dPutFile(sess, key, name, blob){
 }
 async function sessionMeta(sess, list, srcs){
   return {format:"groq-dictation", version:2, exported:new Date().toISOString(), session:sess,
-    segments:list.map(g => { const {blob, _v, ...r} = g; return r; }),
+    segments:list.map(g => { const {blob, _v, _ab, _abFrom, ...r} = g; return r; }),
     sources:srcs.map(s => ({id:s.id, name:s.name, type:s.type, driveId:s.driveId||null}))};
 }
 function driveDirty(sid){
