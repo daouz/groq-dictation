@@ -581,8 +581,11 @@ async function addSegment(blob, meta){
 
 /* ================= 錄音與自動切段 ================= */
 const rec = {on:false, stream:null, ctx:null, an:null, buf:null, mr:null, segStart:0, lastVoice:0, voiced:0, t0:0, iv:null, mime:"", ext:"webm", wake:null, lastTick:0};
+const IS_WEBKIT = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Safari/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Android/.test(navigator.userAgent)) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 function pickMime(){
-  for (const [m,e] of [["audio/webm;codecs=opus","webm"],["audio/webm","webm"],["audio/mp4","m4a"]])
+  // iPhone／Safari 錄成 WebM 時自己常常播不出來，改錄 MP4（AAC），Groq 也接受
+  const order = IS_WEBKIT ? [["audio/mp4","m4a"],["audio/webm;codecs=opus","webm"],["audio/webm","webm"]] : [["audio/webm;codecs=opus","webm"],["audio/webm","webm"],["audio/mp4","m4a"]];
+  for (const [m,e] of order)
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return [m,e];
   return ["", "webm"];
 }
@@ -1113,7 +1116,11 @@ async function rawPlayBlob(g){
 async function wavUrl(g){
   if (wavCache.has(g.id)) return wavCache.get(g.id);
   const src = await rawPlayBlob(g);
-  const url = URL.createObjectURL(src.type === "audio/wav" ? src : wav16(await decodeTo16k(src)));
+  if (!src.size) throw new Error("音檔是空的");
+  const pcm = src.type === "audio/wav" ? null : await Promise.race([decodeTo16k(src), sleep(15000).then(() => { throw new Error("轉換逾時"); })]).catch(e => {
+    throw new Error(/webm/.test(src.type) && IS_WEBKIT ? "這個瀏覽器無法播放 WebM 錄音，請改用電腦上的 Chrome 開啟（或從 Drive 下載）" : "這個瀏覽器無法解碼此音檔（" + e.message + "）");
+  });
+  const url = URL.createObjectURL(pcm ? wav16(pcm) : src);
   wavCache.set(g.id, url);
   if (wavCache.size > 30) { const k = wavCache.keys().next().value; URL.revokeObjectURL(wavCache.get(k)); wavCache.delete(k); }
   return url;
