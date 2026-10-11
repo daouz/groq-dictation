@@ -120,6 +120,9 @@ details.menu>summary::-webkit-details-marker{display:none}
 #recBtn::before{content:"";width:24px;height:24px;border-radius:50%;background:var(--rec);transition:all .2s}
 #recBtn.on{border-color:var(--rec);animation:pulse 1.6s infinite}
 #recBtn.on::before{width:20px;height:20px;border-radius:5px}
+#recBtn.on.paused{animation:none;border-color:var(--warn)}
+#recBtn.on.paused::before{background:var(--warn)}
+#pauseRecBtn{flex:none;padding:8px 10px;border-radius:10px}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 45%,transparent)}50%{box-shadow:0 0 0 9px transparent}}
 @media (prefers-reduced-motion:reduce){#recBtn.on{animation:none}}
 .meterwrap{flex:1;min-width:0;display:grid;gap:5px}
@@ -343,6 +346,7 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
     </div>
     <div class="checks">
       <label><input type="checkbox" id="agc">麥克風自動增益（安靜環境建議關閉，可減少幻聽）</label>
+      <label><input type="checkbox" id="hwkeys">用 AirPods／耳機按鍵控制錄音：按一下暫停或繼續、按兩下立即切段（實驗）</label>
       <label><input type="checkbox" id="webasr">錄音時同時用 Apple／瀏覽器語音辨識比對（實驗，抓幻聽用）</label>
       <label><input type="checkbox" id="autoplay">開啟審閱時自動播放該段</label>
     </div>
@@ -451,6 +455,7 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
         <div class="meter"><i id="lvl"></i><b id="thrMark"></b></div>
         <div class="segprog"><i id="segp"></i></div>
       </div>
+      <button id="pauseRecBtn" type="button" disabled title="暫停／繼續錄音" aria-label="暫停錄音"><svg class="ico" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
       <button id="cutBtn" type="button" disabled title="立即切段"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg><span>切段</span></button>
     </div>
   </div>
@@ -524,7 +529,7 @@ const mimeOf = name => ({webm:"audio/webm",m4a:"audio/mp4",mp4:"audio/mp4",ogg:"
 
 /* ================= 設定 ================= */
 const DEF = {key:"", asr:TURBO, escalate:"v3", lang:"zh", tier:"free", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b",
-  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true, webasr:false};
+  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true, webasr:false, hwkeys:true};
 const S = Object.assign({}, DEF, LS.get("settings", {}));
 if (typeof S.escalate === "boolean") S.escalate = S.escalate ? "v3" : "off";
 const NUM = ["minSec","maxSec","thr","kbps"];
@@ -741,10 +746,11 @@ function startRecorder(){
 function cut(){
   if (!rec.mr) return;
   const old = rec.mr; old._dur = (performance.now()-rec.segStart)/1000; old._voiced = rec.voiced;
-  if (rec.on) startRecorder(); else rec.mr = null;   // 先接上新的錄音器再停舊的，不漏字
+  if (rec.on && !rec.paused) startRecorder(); else rec.mr = null;   // 先接上新的錄音器再停舊的，不漏字
   try { old.stop(); } catch {}
 }
 async function startRec(){
+  if (S.hwkeys) hwArm();   // 必須在使用者按下的當下啟動，iOS 才會把耳機按鍵交給這個頁面
   readForm();
   if (!S.key) { $("#settings").hidden=false; return toast("請先輸入 Groq API key"); }
   try { rec.stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:!!S.agc}}); }
@@ -763,9 +769,12 @@ async function startRec(){
   liveUI();
   try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {}
   banner("mic");
-  $("#recBtn").classList.add("on"); $("#recBtn").setAttribute("aria-label","停止錄音"); $("#recState").textContent="錄音中・停頓時自動切段"; $("#recState").classList.add("on"); $("#cutBtn").disabled=false;
+  rec.paused = false;
+  $("#recBtn").classList.add("on"); $("#recBtn").setAttribute("aria-label","停止錄音"); recStateUI(); $("#cutBtn").disabled=false; $("#pauseRecBtn").disabled=false;
+  if (S.hwkeys) hwOn();
 }
 function stopRec(){
+  hwOff(); rec.paused = false; $("#pauseRecBtn").disabled = true;
   if (web.on || web.r) webStop(); banner("web");
   rec.on = false; clearInterval(rec.iv); cut(); liveUI();
   setTimeout(() => { try { if (navigator.audioSession) navigator.audioSession.type = "auto"; } catch {} }, 300);
@@ -779,6 +788,7 @@ function tick(){
   let sum=0; for (let i=0;i<rec.buf.length;i++) sum += rec.buf[i]*rec.buf[i];
   const rms = Math.sqrt(sum/rec.buf.length), now = performance.now(), dt = now - rec.lastTick; rec.lastTick = now;
   $("#lvl").style.width = Math.min(100, Math.sqrt(rms/0.25)*100) + "%";
+  if (rec.paused) return;
   if (rms > S.thr) { rec.lastVoice = now; rec.voiced += dt/1000; }
   if (now - (rec.lastWatch||0) > 1000) { rec.lastWatch = now; webWatch(rms); }
   const el = (now-rec.segStart)/1000;
@@ -789,6 +799,71 @@ function tick(){
 }
 $("#recBtn").onclick = () => rec.on ? stopRec() : startRec();
 $("#cutBtn").onclick = () => cut();
+$("#pauseRecBtn").onclick = () => rec.paused ? resumeRec() : pauseRec();
+
+/* ---------- 暫停／繼續錄音（麥克風保持開啟，所以耳機按鍵也能恢復） ---------- */
+function recStateUI(){
+  const st = $("#recState"), pb = $("#pauseRecBtn");
+  if (!rec.on) return;
+  st.textContent = rec.paused ? "已暫停・按 ▶ 或耳機按一下繼續" : "錄音中・停頓時自動切段" + (S.hwkeys && hw.armed ? "・耳機可控制" : "");
+  st.classList.toggle("on", !rec.paused);
+  $("#recBtn").classList.toggle("paused", !!rec.paused);
+  pb.setAttribute("aria-label", rec.paused ? "繼續錄音" : "暫停錄音");
+  pb.innerHTML = rec.paused ? '<svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' : '<svg class="ico" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+}
+function pauseRec(){
+  if (!rec.on || rec.paused) return;
+  rec.paused = true; cut(); beep("pause"); recStateUI(); hwState();
+  toast("錄音已暫停");
+}
+function resumeRec(){
+  if (!rec.on || !rec.paused) return;
+  rec.paused = false; startRecorder(); beep("resume"); recStateUI(); hwState();
+  toast("繼續錄音");
+}
+function beep(kind){
+  try {
+    const ac = rec.ctx; if (!ac) return; if (ac.state === "suspended") ac.resume();
+    const tones = kind === "pause" ? [660, 440] : kind === "resume" ? [440, 660] : [880];
+    tones.forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + i * 0.13;
+      o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.12);
+    });
+  } catch {}
+}
+
+/* ---------- 耳機／AirPods 按鍵（Media Session） ---------- */
+const hw = {audio:null, url:"", armed:false, lastCut:0};
+function hwArm(){
+  if (!("mediaSession" in navigator)) return;
+  try {
+    if (!hw.audio) { hw.url = URL.createObjectURL(wav16(new Float32Array(16000))); hw.audio = new Audio(hw.url); hw.audio.loop = true; hw.audio.volume = 0.01; }
+    hw.audio.play().then(() => { hw.armed = true; recStateUI(); }).catch(() => {});
+  } catch {}
+}
+function hwOn(){
+  if (!("mediaSession" in navigator)) return;
+  const ms = navigator.mediaSession;
+  try { ms.metadata = new MediaMetadata({title:"連續聽寫・錄音中", artist:cur?.name || "", album:"Groq 連續聽寫"}); } catch {}
+  const set = (a, fn) => { try { ms.setActionHandler(a, fn); } catch {} };
+  set("play", () => { resumeRec(); hw.audio?.play().catch(()=>{}); });
+  set("pause", () => { pauseRec(); });
+  set("stop", null);
+  set("nexttrack", () => { if (!rec.on || rec.paused) return; const t = Date.now(); if (t - hw.lastCut < 800) return; hw.lastCut = t; cut(); beep("cut"); toast("已切段"); });
+  set("previoustrack", null);
+  set("togglemicrophone", () => { rec.paused ? resumeRec() : pauseRec(); });
+  hwState();
+}
+function hwState(){ try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = rec.paused ? "paused" : "playing"; } catch {} }
+function hwOff(){
+  if (!("mediaSession" in navigator)) return;
+  const ms = navigator.mediaSession;
+  ["play","pause","nexttrack","togglemicrophone"].forEach(a => { try { ms.setActionHandler(a, null); } catch {} });
+  try { ms.metadata = null; ms.playbackState = "none"; } catch {}
+  try { hw.audio?.pause(); } catch {}
+  hw.armed = false;
+}
 document.addEventListener("visibilitychange", async () => {
   if (rec.on && document.visibilityState==="visible") { try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {} }
 });
