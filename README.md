@@ -47,5 +47,6 @@
 
 ## 檔案
 
-- `index.html`：完整的單頁工具，不需要建置步驟。
+- `index.html`：頁面骨架；`css/app.css`：樣式；`js/*.js`：程式（依檔名順序載入，不需要建置步驟）。
+- `tools/`：開發用檢查工具（`check.sh` 一次跑完語法、載入順序、版本號與冒煙測試；`outline.sh` 列出函式索引；`stamp.mjs` 更新快取版本號）。
 - `manifest.webmanifest`、`icon.svg`：加入主畫面用。

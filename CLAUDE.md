@@ -3,27 +3,30 @@
 給接手這個 repo 的 Claude 看的。使用者是 daouz（台灣），請用**台灣正體中文**回覆，介面文字也一律用台灣正體中文。
 
 ## 產品是什麼
-單一網頁工具（`index.html`，約 2,500 行，無建置步驟），部署在 GitHub Pages：https://daouz.github.io/groq-dictation/ 。
+單一網頁工具，無建置步驟，部署在 GitHub Pages：https://daouz.github.io/groq-dictation/ 。
 主要在 **iPhone Safari** 使用，其次是電腦 Chrome。流程：連續錄音 → 自動分段 → Groq Whisper 轉錄 → gpt-oss 修正成台灣正體 → 人工審閱 → 整理成筆記。
 
-## 程式結構（`index.html` 內以 `/* ===== 區塊名 ===== */` 分段）
-| 區塊 | 重點 |
+## 程式結構
+`index.html` 只有 HTML 骨架；樣式在 `css/app.css`，程式拆成 `js/` 下的經典 `<script>`（不是 ES module），**依檔名順序載入、共用同一個全域範圍**，所以任何檔案都能直接用其他檔案的函式與變數。
+**改程式前先跑 `tools/outline.sh [檔名前綴]` 找到函式與行號，只讀需要的檔案，不要整批讀。**
+
+| 檔案 | 內容與重點 |
 |---|---|
-| 設定 | `DEF` 預設值、`S` 設定物件（存在 localStorage `gd_settings`）、`TIER()` 依免費／開發者方案決定併發數與每次送出量 |
-| IndexedDB | DB `groq-dictation` v3：`sessions`、`segs`、`sources`（上傳原檔）、`master`（完整母帶分塊）。**音檔一律以 ArrayBuffer 存入**（`put()`/`hydrate()`），因為 Safari 存 Blob 重新整理後會 NotFoundError |
-| 錄音與自動切段 | 每段一個 MediaRecorder；`cut()` 先開新的、舊的晚 0.5 秒停（重疊防漏音）；最長秒數到了會等 0.3 秒停頓才切；有聲 <0.6 秒不單獨成段；`noteGap()` 偵測背景／麥克風被佔用造成的中斷 |
-| 暫停、耳機按鍵 | `pauseRec/resumeRec`；Media Session（AirPods 按一下暫停／繼續、按兩下切段），需在按錄音鍵時 `hwArm()` 播放靜音音檔取得控制權 |
-| 完整母帶 | `masterStart/Stop`，另一個 MediaRecorder 每 5 秒寫入 `master` store；`cur.takes` 記錄每次錄音 |
-| 音訊處理 | `decodeTo16k`、`wav16`、`splitPCM`（上傳長檔依靜音切段，送出時才轉 16k WAV） |
-| Groq API | `groq()`；429 解析 "try again in" 等待時間 |
-| 轉錄與幻聽偵測 | `verbose_json`；`analyze()` 濾除片尾套語（`HALLU`）、重複、低信心、提示詞外洩；可疑段落自動換另一個 Whisper 模型並用 `sim()` 比對 |
-| 逐段修正 | `FIX_SYS` 提示詞，批次送多段，回傳 JSON `{segments:[{seq,text,issues}]}` |
-| 工作佇列 | `lanes.tx`／`lanes.fx` 兩條獨立佇列；401 整體暫停；429 整條等待；轉錄額度用完時 `quotaFallback()` 改用 Apple 辨識暫代 |
-| 逐段審閱 | 收合沒問題的段落、時間軸 canvas、問題清單（以問題為單位）、閱讀模式、分章（時間／AI 主題）、排序 |
-| 審閱面板 | 右側（手機為底部抽屜）；播放、變速、問題逐條處理、兩模型對照、修改紀錄；面板頂／底再滑動切換上下段 |
-| 整理全文 | 分塊 `ORG_PART` → 程式組合 → `ORG_SUM` 產生標題摘要；輸出含「待確認清單」並回寫到段落 |
-| Apple 辨識 | Web Speech API（zh-TW），錄音時同步；用「第一次聽到的時間」對應分段 |
-| Google Drive | GIS token client，scope `drive.file`，Client ID 寫死在程式內；token 每小時到期需使用者再按連線 |
+| `00-core.js` | 工具（`$`、`esc`、`toast`、`LS`）；設定：`DEF` 預設值、`S` 設定物件（localStorage `gd_settings`）、`TIER()` 依免費／開發者方案決定併發數與每次送出量；提示橫幅 `banner()` |
+| `10-store.js` | IndexedDB `groq-dictation` v3：`sessions`、`segs`、`sources`（上傳原檔）、`master`（完整母帶分塊）。**音檔一律以 ArrayBuffer 存入**（`put()`/`hydrate()`），因為 Safari 存 Blob 重新整理後會 NotFoundError。全域狀態 `segs`(Map)、`cur`、`normalize()`、`saveSeg()`、`needsReview()`；工作階段切換；`addSegment()` |
+| `20-record.js` | 每段一個 MediaRecorder；`cut()` 先開新的、舊的晚 0.5 秒停（重疊防漏音）；`tick()` 每 50ms：最長秒數到了等 0.3 秒停頓才切、有聲 <0.6 秒不單獨成段；`noteGap()` 偵測中斷。`pauseRec/resumeRec`；Media Session 耳機按鍵（`hwArm()` 必須在按錄音鍵當下呼叫）；完整母帶 `masterStart/Stop`（每 5 秒寫入 `master`，`cur.takes` 記錄） |
+| `30-audio.js` | `decodeTo16k`、`wav16`、`splitPCM`（上傳長檔依靜音切段，送出時才轉 16k WAV）、`segAudio()`、上傳檔案 |
+| `40-asr.js` | `groq()`（429 解析 "try again in"）；`analyze()` 濾除片尾套語（`HALLU`）、重複、低信心、提示詞外洩；`sim()` 兩模型比對、`applyBest()`；逐段修正 `FIX_SYS`、`fixBatch()`、`parseFix()`（回傳 `{segments:[{seq,text,issues}]}`） |
+| `50-queue.js` | `lanes.tx`／`lanes.fx` 兩條獨立佇列，`pump()` 排程；401 整體暫停；429 整條等待；轉錄額度用完時 `quotaFallback()` 改用 Apple 辨識暫代；`redo()`、`refix()` |
+| `60-views.js` | 文字工具（`hlText`、`pushHist`）；統計、篩選、列表 `render()`／`reconcile()`（key 比對局部更新）；播放；逐段審閱：收合、時間軸 canvas、問題清單、閱讀模式、分章（時間／AI 主題）、排序 |
+| `70-panel.js` | 審閱面板（右側，手機為底部抽屜）：播放、變速、問題逐條處理、兩模型對照、修改紀錄、面板頂／底再滑動切換上下段；全文尋找取代；合併稿 |
+| `80-export.js` | 下載／複製、ZIP 匯出匯入（不壓縮）、儲存空間、釋放本機音檔 |
+| `85-organize.js` | 整理全文：分塊 `ORG_PART` → 程式組合 → `ORG_SUM` 產生標題摘要；輸出含「待確認清單」並回寫到段落 |
+| `90-webasr.js` | Apple／Web Speech API（zh-TW），錄音時同步；用「第一次聽到的時間」對應分段 |
+| `95-drive.js` | Google Drive：GIS token client，scope `drive.file`，Client ID 寫死在程式內；token 每小時到期需使用者再按連線 |
+| `99-boot.js` | 開 DB、載入工作階段、備份提醒。**所有「載入時就要執行、且會用到其他檔案函式」的程式放這裡** |
+
+**拆檔後的規則：** 頂層程式在載入時只能呼叫「同檔或較前面檔案」的函式（函式提升不會跨檔）；放在事件處理函式裡的呼叫不受限。`tools/hoist-check.cjs` 會檢查。新增檔案要加到 `index.html` 的 script 清單並執行 `node tools/stamp.mjs`。
 
 ## 已確認的限制（不要再嘗試）
 - iPhone 上「播放音檔給 Apple 辨識聽」不可行：開麥克風時 iOS 切成通話模式、聲音走聽筒且回音消除會濾掉。電腦版保留實驗按鈕，iOS 已隱藏。
@@ -33,10 +36,10 @@
 - 網頁在背景或鎖屏時 iOS 會停麥克風，只能偵測並標示。
 
 ## 開發與驗證方式
-- 只改 `index.html`；改完用 `node --check` 檢查抽出的 `<script>`。
-- 介面用 Playwright（`/home/claude/.npm-global/lib/node_modules/@playwright/mcp/node_modules/playwright/index.mjs`，Chromium 在 `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`）以 iPhone 13 尺寸截圖，檢查無左右捲動、無 pageerror。
-- 錄音流程可用 `--use-fake-device-for-media-stream` 模擬麥克風測試（記得在 `#key` 填值，`readForm()` 會讀輸入框）。
-- 本地伺服器：`python3 -m http.server 8765`。
+- 改完執行 `tools/check.sh`：每個 js 做 `node --check`、載入順序檢查、版本號檢查，最後跑冒煙測試（`--fast` 可略過瀏覽器）。
+- **改了 css／js 一定要執行 `node tools/stamp.mjs`** 更新 `index.html` 的 `?v=` 版本號，否則 iPhone 可能在 GitHub Pages 快取期間混用新舊檔案（`check.sh` 會擋下忘記更新的情況）。
+- 冒煙測試 `tools/smoke.mjs`：自帶靜態伺服器，以 iPhone 13 尺寸、模擬麥克風錄兩段 → 送轉錄（Groq 請求被攔截回 401）→ 暫停，並切換各檢視、開審閱面板；檢查無 pageerror、無左右捲動。`SHOTS=資料夾 tools/check.sh` 會存截圖。Playwright 在 `/opt/node22/lib/node_modules/playwright`，Chromium 在 `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`（可用環境變數 `PW`、`CHROME` 覆寫）。
+- 手動測試：`python3 -m http.server 8765`。錄音流程可用 `--use-fake-device-for-media-stream` 模擬麥克風（記得在 `#key` 填值，`readForm()` 會讀輸入框）。
 - 直接 commit 到 `main` 並 push，GitHub Pages 會自動更新。commit 訊息結尾附上系統要求的 attribution。
 
 ## 使用者偏好
@@ -46,6 +49,12 @@
 - 免費 Groq 方案為主，注意 token 與額度。
 - **開新主題提醒**：若對話拉得很長，且接下來的功能討論已經沒有延續性（話題跳來跳去、舊脈絡已不影響新決定），Claude 要主動提醒 daouz 開新主題，並先把目前的結論、已決定事項、未完成項目寫入本檔（對應段落更新，不另開新檔），方便新對話直接接續。
 
-## 可能的後續工作
-- 把 `index.html` 拆成多個檔案（CSS、錄音、Groq、審閱、Drive），之後每次修改只需讀相關檔案，更省 token。
+## 待辦（2026-10 程式檢視結果，依建議順序）
+以下是讀程式碼得出的判斷，尚未實測：
+1. **錄音偵測小修（低風險）**：`tick()` 的 `fftSize` 1024 每 50ms 只取樣約 21ms，改 2048 才接近全覆蓋；`rec.voiced += dt/1000` 的 dt 最多 1.5 秒，卡頓時單一取樣會被算成大段有聲，應設上限；`tick()` 每秒 20 次查 DOM，應快取節點並略過沒變的值。
+2. **音檔與段落資料分開存（建議做，中風險）**：`put("segs")` 每次狀態改變都整段重寫音檔（一小時約 260 MB 寫入，實需約 43 MB），切換工作階段也會把全部音檔載入記憶體。改成 DB v4 新增 `segaudio` store，音檔只寫一次、需要時才讀；要寫遷移。需 iPhone 實機驗證。
+3. **上傳長檔記憶體**：`decodeTo16k` 以裝置取樣率與原聲道解碼整檔（1 小時立體聲約 1.4 GB），`pcmCache` 另常駐約 230 MB／小時。改用 `new AudioContext({sampleRate:16000})` 並降成單聲道。需 iPhone 確認。
+4. 即時錄音用固定 `S.thr`，上傳檔用自適應雜訊底，可統一並加進出雙門檻（行為會變，需實錄測試）。
+5. 0.5 秒重疊在話中切段（耳機按兩下、最長秒數強切）時可能重複 1–2 字，沒有處理；建議標記「疑似接縫重複」讓人工確認，不自動刪。
+6. 記錄 Groq 回應的 `usage`，再決定是否調整修正批次大小或精簡 `FIX_SYS`。
 - 實機待驗證：AirPods 按鍵、Apple 同步辨識在 iPhone 上是否與錄音衝突、MP4 播放。
