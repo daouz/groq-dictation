@@ -108,7 +108,8 @@ const FIX_SYS = `你是台灣正體中文的逐字稿校對員。輸入是語音
 只輸出 JSON：
 {"segments":[{"seq":段號,"text":"校正後文字","issues":[{"quote":"text 中逐字存在的片段，15 字以內","type":"疑似幻聽|語意不通|疑似錯字|數字或名詞存疑","note":"10 字內理由","suggest":"建議改成的文字；建議刪除填空字串；不確定填 null"}]}]}
 每個輸入段號都要輸出一筆；沒有問題時 issues 為 []。`;
-const TYPES = ["疑似幻聽","語意不通","疑似錯字","數字或名詞存疑"];
+const SEAM = "疑似接縫重複";
+const TYPES = ["疑似幻聽","語意不通","疑似錯字","數字或名詞存疑", SEAM];
 function cleanIssues(arr){
   return (Array.isArray(arr) ? arr : []).filter(i => i && typeof i.quote==="string" && i.quote.trim()).slice(0, 12).map(i => ({
     quote: i.quote.trim(), type: TYPES.includes(i.type) ? i.type : "語意不通", note: String(i.note||"").slice(0, 60),
@@ -153,3 +154,18 @@ async function fixBatch(batch, noJson){
   return parseFix(j.choices?.[0]?.message?.content || "", batch);
 }
 
+
+/* 0.5 秒重疊在話中切段時，下一段開頭可能重複上一段結尾 1–8 字：只標記，不自動刪 */
+const SEAM_PUNCT = /[\s，。、？！：；,.?!]/;
+function seamCheck(g){
+  if (!g || g.srcId || g.edited || !g.text || g.status !== "done" || (g.issues||[]).some(i => i.type === SEAM)) return;
+  const prev = segs.get(g.sid + ":" + String(g.seq - 1).padStart(5, "0"));
+  if (!prev || prev.srcId || prev.status !== "done" || !prev.text) return;
+  const gt = g.text.replace(new RegExp("^" + SEAM_PUNCT.source + "+"), ""), pt = prev.text.replace(new RegExp(SEAM_PUNCT.source, "g"), "");
+  for (let k = Math.min(8, gt.length - 1); k >= 2; k--) {
+    const h = gt.slice(0, k);
+    if (SEAM_PUNCT.test(h) || !pt.endsWith(h)) continue;
+    g.issues.push({quote:h, type:SEAM, note:`與 #${prev.seq} 結尾相同`, suggest:"", state:""});
+    computeRisk(g); return;
+  }
+}

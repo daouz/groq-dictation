@@ -93,6 +93,7 @@ async function runFx(batch){
       g.issues = issues; recheckIssues(g);
       g.status = "done"; g.tries = 0; g.nextAt = 0; g.solo = false;
     }
+    for (const g of batch) { seamCheck(g); const nx = segs.get(g.sid + ":" + String(g.seq + 1).padStart(5, "0")); if (nx && !batch.includes(nx)) { seamCheck(nx); touch(nx); saveSeg(nx, true); } }
   } catch(e) {
     for (const g of batch) { handleErr(g, e, "fx"); if (batch.length > 1 && e.status===413) g.solo = true; }
   } finally {

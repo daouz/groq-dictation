@@ -1,6 +1,6 @@
 "use strict";
 /* ================= 文字工具 ================= */
-const TYPECLS = {"疑似幻聽":"hl-h", "語意不通":"hl-s", "疑似錯字":"hl-t", "數字或名詞存疑":"hl-t"};
+const TYPECLS = {"疑似幻聽":"hl-h", "語意不通":"hl-s", "疑似錯字":"hl-t", "數字或名詞存疑":"hl-t", "疑似接縫重複":"hl-s"};
 function pushHist(g, text){ if (!text) return; if (g.history[0]?.text === text) return; g.history.unshift({t:Date.now(), text}); g.history = g.history.slice(0, 20); }
 function recheckIssues(g){ const t = g.text || ""; for (const i of g.issues) if (!i.state && i.quote && !t.includes(i.quote)) i.state = "fixed"; computeRisk(g); }
 function hlText(g){
