@@ -2,14 +2,23 @@
 /* ================= 音訊處理（解碼、切段、WAV） ================= */
 async function decodeTo16k(blob){
   const ab = await blob.arrayBuffer();
-  const AC = window.AudioContext || window.webkitAudioContext; const ac = new AC();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let ac; try { ac = new AC({sampleRate:16000}); } catch { ac = new AC(); }   // 直接以 16k 解碼，省下整檔原取樣率的記憶體
   let dec;
   try { dec = await new Promise((res,rej) => { const p = ac.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); }); }
   finally { try { ac.close(); } catch {} }
-  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  const oc = new OAC(1, Math.max(1, Math.ceil(dec.duration*16000)), 16000);
-  const s = oc.createBufferSource(); s.buffer = dec; s.connect(oc.destination); s.start();
-  return (await oc.startRendering()).getChannelData(0);
+  if (dec.sampleRate !== 16000) {   // 舊瀏覽器不支援指定取樣率：先離線降成單聲道 16k
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const oc = new OAC(1, Math.max(1, Math.ceil(dec.duration*16000)), 16000);
+    const s = oc.createBufferSource(); s.buffer = dec; s.connect(oc.destination); s.start();
+    return (await oc.startRendering()).getChannelData(0);
+  }
+  const nc = dec.numberOfChannels;
+  if (nc === 1) return dec.getChannelData(0);
+  const out = new Float32Array(dec.length);   // 多聲道逐聲道累加成單聲道，不同時持有所有聲道的副本
+  for (let c = 0; c < nc; c++) { const d = dec.getChannelData(c); for (let i = 0; i < out.length; i++) out[i] += d[i]; }
+  for (let i = 0; i < out.length; i++) out[i] /= nc;
+  return out;
 }
 function wav16(f32, sr=16000){
   const n=f32.length, b=new ArrayBuffer(44+n*2), v=new DataView(b);
