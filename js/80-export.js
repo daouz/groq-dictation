@@ -105,7 +105,7 @@ $("#zipIn").onchange = async e => { const f = e.target.files[0]; e.target.value 
 async function storageInfo(){
   try {
     const e = await navigator.storage?.estimate?.(); const p = await navigator.storage?.persisted?.();
-    $("#stInfo").textContent = (e ? `已用 ${MB(e.usage||0)}，瀏覽器允許約 ${MB(e.quota||0)}。` : "") + (p ? "已設為永久保存。" : "尚未永久保存：空間不足時瀏覽器可能清除資料。");
+    $("#stInfo").textContent = (e ? `已用 ${MB(e.usage||0)}，瀏覽器允許約 ${MB(e.quota||0)}。` : "") + (p ? "已設為永久保存。" : "尚未永久保存：空間不足時瀏覽器可能清除資料。") + (usageSummary() ? " " + usageSummary() : "");
     $("#persistBtn").hidden = !!p;
   } catch { $("#stInfo").textContent = "無法讀取儲存空間資訊。"; }
 }

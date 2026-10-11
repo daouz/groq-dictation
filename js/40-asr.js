@@ -151,7 +151,20 @@ async function fixBatch(batch, noJson){
   let j;
   try { j = await groq("chat/completions", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); }
   catch(e){ if (e.status===400 && !noJson && /json|response_format/i.test(e.message)) return fixBatch(batch, true); throw e; }
+  logUsage(j, batch.length, T.fixTok);
   return parseFix(j.choices?.[0]?.message?.content || "", batch);
+}
+/* 記錄修正呼叫的 token 用量（最近 100 筆，存 localStorage），供評估批次大小與 FIX_SYS 長度 */
+function logUsage(j, n, max){
+  const u = j.usage; if (!u) return;
+  const a = LS.get("usage", []);
+  a.push({t:Date.now(), n, max, p:u.prompt_tokens||0, c:u.completion_tokens||0, r:u.completion_tokens_details?.reasoning_tokens||0, f:j.choices?.[0]?.finish_reason||""});
+  LS.set("usage", a.slice(-100));
+}
+function usageSummary(){
+  const a = LS.get("usage", []); if (!a.length) return "";
+  const avg = k => Math.round(a.reduce((s,x)=>s+x[k],0)/a.length), cut = a.filter(x => x.f === "length").length;
+  return `修正用量（最近 ${a.length} 次）：平均每次 ${avg("n")} 段、輸入 ${avg("p")}、輸出 ${avg("c")}（其中推理 ${avg("r")}）tokens；輸出被截斷 ${cut} 次。`;
 }
 
 
