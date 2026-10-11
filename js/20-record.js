@@ -54,6 +54,7 @@ async function startRec(){
   trk?.addEventListener("mute", () => { rec.muteAt = performance.now(); });
   trk?.addEventListener("unmute", () => { if (rec.muteAt) { noteGap((performance.now() - rec.muteAt) / 1000, "麥克風被系統暫時佔用，例如來電或 Siri"); rec.muteAt = 0; } });
   rec.stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (rec.on) { stopRec(); banner("mic", "麥克風中斷（可能是裝置拔除或系統打斷），已停止錄音並保存目前內容。"); } });
+  rec.floor = S.thr/3; rec.speaking = false;
   rec.on = true; rec.t0 = performance.now(); rec.lastTick = rec.t0; rec.gapCount = 0; banner("gap"); startRecorder(); masterStart();
   rec.iv = setInterval(tick, 50);
   web.finals = []; web.up = []; web.restarts = []; web.lastFinal = ""; web.interim = ""; web.zeroSince = 0;
@@ -90,7 +91,11 @@ function tick(){
   if (dt > 1500) noteGap(dt / 1000, document.visibilityState === "hidden" ? "網頁切到背景或螢幕鎖定" : "系統暫停了網頁");
   barW("lvl", Math.sqrt(rms/0.25)*100);
   if (rec.paused) return;
-  if (rms > S.thr) { rec.lastVoice = now; rec.voiced += Math.min(dt, 250)/1000; }   // 卡頓後的單一取樣不能算成一大段有聲
+  // 自適應雜訊底（與上傳檔的 splitPCM 同一套算法）＋進出雙門檻：進入 = min(S.thr, max(0.003, 雜訊底×3))，離開 = 進入×0.6
+  rec.floor = rms < rec.floor ? rec.floor*0.9 + rms*0.1 : rec.floor*1.001;
+  const on = Math.min(S.thr, Math.max(0.003, rec.floor*3)), off = on*0.6;
+  rec.speaking = rec.speaking ? rms > off : rms > on;
+  if (rec.speaking) { rec.lastVoice = now; rec.voiced += Math.min(dt, 250)/1000; }   // 卡頓後的單一取樣不能算成一大段有聲
   if (now - (rec.lastWatch||0) > 1000) { rec.lastWatch = now; webWatch(rms); }
   const el = (now-rec.segStart)/1000;
   const tt = fmtT((now-rec.t0)/1000); if (tt !== rec.ui.t) { rec.ui.t = tt; rec.ui.timer.textContent = tt; }
