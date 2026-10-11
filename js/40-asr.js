@@ -8,12 +8,31 @@ function parseWait(msg, hdr){
   const m2 = /try again in\s*([\d.]+)ms/i.exec(msg||""); if (m2) ms = Math.max(ms, +m2[1]);
   return ms ? ms + 500 : 0;
 }
+/* Groq 拒絕時記錄回饋：狀態碼、訊息與限額標頭（最近 50 筆，存 localStorage gd_rejects） */
+function logReject(path, init, r, msg){
+  let model = ""; try { model = init.body instanceof FormData ? init.body.get("model") : JSON.parse(init.body).model; } catch {}
+  const h = n => r.headers.get(n) || "";
+  const a = LS.get("rejects", []);
+  a.push({t:Date.now(), path, model:model||"", status:r.status, msg:String(msg).slice(0, 300),
+    resetReq:h("x-ratelimit-reset-requests"), resetTok:h("x-ratelimit-reset-tokens"), retryAfter:h("retry-after"),
+    remReq:h("x-ratelimit-remaining-requests"), remTok:h("x-ratelimit-remaining-tokens"), limReq:h("x-ratelimit-limit-requests"), limTok:h("x-ratelimit-limit-tokens")});
+  LS.set("rejects", a.slice(-50));
+}
+function rejectSummary(){
+  const a = LS.get("rejects", []); if (!a.length) return "";
+  return "最近被 Groq 拒絕：" + a.slice(-3).reverse().map(x => {
+    const f = []; if (x.retryAfter) f.push("retry-after " + x.retryAfter + "s"); if (x.resetReq) f.push("每日請求重設 " + x.resetReq); if (x.resetTok) f.push("每分鐘 token 重設 " + x.resetTok);
+    if (x.remReq) f.push("剩餘請求 " + x.remReq); if (x.remTok) f.push("剩餘 token " + x.remTok);
+    return `${new Date(x.t).toLocaleTimeString("zh-TW", {hour12:false})} ${x.status} ${x.model || x.path}｜${x.msg.slice(0, 120)}${f.length ? "｜" + f.join("、") : ""}`;
+  }).join("；");
+}
 async function groq(path, init){
   let r;
   try { r = await fetch("https://api.groq.com/openai/v1/"+path, {...init, headers:{Authorization:"Bearer "+S.key, ...(init.headers||{})}}); }
   catch { throw new ApiErr("網路連線失敗", 0); }
   if (!r.ok) {
     let m = "HTTP " + r.status; try { const j = await r.json(); m = j.error?.message || m; } catch {}
+    logReject(path, init, r, m);
     throw new ApiErr(m, r.status, r.status===429 ? parseWait(m, r.headers.get("retry-after")) : 0);
   }
   return r.json();
