@@ -47,8 +47,9 @@ async function startRec(){
   [rec.mime, rec.ext] = pickMime();
   const AC = window.AudioContext || window.webkitAudioContext;
   rec.ctx = new AC();
-  const src = rec.ctx.createMediaStreamSource(rec.stream); rec.an = rec.ctx.createAnalyser(); rec.an.fftSize = 1024; src.connect(rec.an);
+  const src = rec.ctx.createMediaStreamSource(rec.stream); rec.an = rec.ctx.createAnalyser(); rec.an.fftSize = 2048; src.connect(rec.an);   // 2048 樣本約 43ms，每 50ms 取一次才不會漏掉中間的聲音
   rec.buf = new Float32Array(rec.an.fftSize);
+  rec.ui = {lvl:$("#lvl"), timer:$("#timer"), segp:$("#segp"), w:{}, t:""};
   const trk = rec.stream.getAudioTracks()[0];
   trk?.addEventListener("mute", () => { rec.muteAt = performance.now(); });
   trk?.addEventListener("unmute", () => { if (rec.muteAt) { noteGap((performance.now() - rec.muteAt) / 1000, "麥克風被系統暫時佔用，例如來電或 Siri"); rec.muteAt = 0; } });
@@ -80,18 +81,20 @@ function noteGap(sec, why){
   rec.gapCount = (rec.gapCount || 0) + 1;
   banner("gap", `⚠ 錄音可能中斷了約 ${Math.round(sec)} 秒（${why}）。已在該段標示，請保持本頁在前景、螢幕不要鎖定。`);
 }
+// 音量條與段落進度條：每秒 20 次，只在寬度（取整數 %）有變時才寫入 DOM
+function barW(k, pct){ const v = Math.round(Math.min(100, pct)); if (rec.ui.w[k] !== v) { rec.ui.w[k] = v; rec.ui[k].style.width = v + "%"; } }
 function tick(){
   rec.an.getFloatTimeDomainData(rec.buf);
   let sum=0; for (let i=0;i<rec.buf.length;i++) sum += rec.buf[i]*rec.buf[i];
   const rms = Math.sqrt(sum/rec.buf.length), now = performance.now(), dt = now - rec.lastTick; rec.lastTick = now;
   if (dt > 1500) noteGap(dt / 1000, document.visibilityState === "hidden" ? "網頁切到背景或螢幕鎖定" : "系統暫停了網頁");
-  $("#lvl").style.width = Math.min(100, Math.sqrt(rms/0.25)*100) + "%";
+  barW("lvl", Math.sqrt(rms/0.25)*100);
   if (rec.paused) return;
-  if (rms > S.thr) { rec.lastVoice = now; rec.voiced += dt/1000; }
+  if (rms > S.thr) { rec.lastVoice = now; rec.voiced += Math.min(dt, 250)/1000; }   // 卡頓後的單一取樣不能算成一大段有聲
   if (now - (rec.lastWatch||0) > 1000) { rec.lastWatch = now; webWatch(rms); }
   const el = (now-rec.segStart)/1000;
-  $("#timer").textContent = fmtT((now-rec.t0)/1000);
-  $("#segp").style.width = Math.min(100, el/S.maxSec*100) + "%";
+  const tt = fmtT((now-rec.t0)/1000); if (tt !== rec.ui.t) { rec.ui.t = tt; rec.ui.timer.textContent = tt; }
+  barW("segp", el/S.maxSec*100);
   if (el >= S.maxSec) {
     if (rec.voiced < 0.2) return cut();                          // 幾乎無聲：照常切
     if (rec.voiced < 0.6 && el < S.maxSec * 2) return;           // 只有一兩個字：併入下一段，不單獨成段
