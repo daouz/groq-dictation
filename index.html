@@ -346,6 +346,7 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
     </div>
     <div class="checks">
       <label><input type="checkbox" id="agc">麥克風自動增益（安靜環境建議關閉，可減少幻聽）</label>
+      <label><input type="checkbox" id="master">同時保存一份完整不中斷的錄音（最保險，多佔約 11 MB／小時）</label>
       <label><input type="checkbox" id="hwkeys">用 AirPods／耳機按鍵控制錄音：按一下暫停或繼續、按兩下立即切段（實驗）</label>
       <label><input type="checkbox" id="webasr">錄音時同時用 Apple／瀏覽器語音辨識比對（實驗，抓幻聽用）</label>
       <label><input type="checkbox" id="autoplay">開啟審閱時自動播放該段</label>
@@ -369,6 +370,7 @@ a.ref{color:var(--accent);font:600 12px var(--mono);text-decoration:none;padding
   <div class="setsec">
     <h3>本機保存</h3>
     <p id="stInfo" class="note" style="margin:0">讀取儲存空間中…</p>
+    <div id="takeList"></div>
     <div class="row" style="margin:0">
       <button id="persistBtn" type="button">要求永久保存</button>
       <button id="zipOut" type="button">匯出本工作階段 ZIP</button>
@@ -529,7 +531,7 @@ const mimeOf = name => ({webm:"audio/webm",m4a:"audio/mp4",mp4:"audio/mp4",ogg:"
 
 /* ================= 設定 ================= */
 const DEF = {key:"", asr:TURBO, escalate:"v3", lang:"zh", tier:"free", fixModel:"openai/gpt-oss-120b", orgModel:"openai/gpt-oss-120b",
-  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true, webasr:false, hwkeys:true};
+  mode:"auto", minSec:8, maxSec:40, thr:0.015, kbps:24, agc:false, autoplay:true, vocab:"", driveAuto:true, webasr:false, hwkeys:true, master:true};
 const S = Object.assign({}, DEF, LS.get("settings", {}));
 if (typeof S.escalate === "boolean") S.escalate = S.escalate ? "v3" : "off";
 const NUM = ["minSec","maxSec","thr","kbps"];
@@ -550,6 +552,7 @@ $("#settings").addEventListener("change", () => { readForm(); $("#setMsg").textC
 $("#setClose").onclick = () => { $("#settings").hidden = true; };
 $("#moreMenu").addEventListener("click", e => { const b = e.target.closest("button"); if (b && b.id !== "delSess" && !b.closest(".confirm")) $("#moreMenu").open = false; });
 document.addEventListener("click", e => { const m = $("#moreMenu"); if (m.open && !m.contains(e.target)) m.open = false; });
+$("#setBtn").addEventListener("click", () => renderTakes());
 $("#setBtn").onclick = () => { $("#settings").hidden = !$("#settings").hidden; if(!$("#settings").hidden) storageInfo(); };
 $("#testKey").onclick = async () => {
   readForm(); $("#setMsg").textContent = "測試中…";
@@ -577,16 +580,17 @@ function drawBanner(){
 
 /* ================= IndexedDB ================= */
 let db;
-function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",2);
+function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",3);
   r.onupgradeneeded=()=>{ const d=r.result;
     if(!d.objectStoreNames.contains("sessions")) d.createObjectStore("sessions",{keyPath:"id"});
     if(!d.objectStoreNames.contains("segs")) d.createObjectStore("segs",{keyPath:"id"}).createIndex("sid","sid");
-    if(!d.objectStoreNames.contains("sources")) d.createObjectStore("sources",{keyPath:"id"}).createIndex("sid","sid"); };
+    if(!d.objectStoreNames.contains("sources")) d.createObjectStore("sources",{keyPath:"id"}).createIndex("sid","sid");
+    if(!d.objectStoreNames.contains("master")) d.createObjectStore("master",{keyPath:"id"}).createIndex("sid","sid"); };
   r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>toast("請關閉其他開著本工具的分頁後重新整理"); }); }
 function req(store, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(store,mode); const q=fn(t.objectStore(store));
   t.oncomplete=()=>res(q ? q.result : undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error || new Error("儲存被中止")); }); }
 /* 音檔以 ArrayBuffer 存進 IndexedDB：Safari 存 Blob 在重新整理後常讀不出來（NotFoundError） */
-const AUDIO_STORES = ["segs","sources"];
+const AUDIO_STORES = ["segs","sources","master"];
 async function put(s, v){
   if (!AUDIO_STORES.includes(s) || !v) return req(s,"readwrite",o=>o.put(v));
   const {_ab, _abFrom, blob, ...r} = v;
@@ -666,7 +670,7 @@ async function switchSession(id){
     if (!g.alts.length && g.raw && HALLU.test(g.raw) && !g.flags.includes("提示詞外洩")) { g.flags = [...g.flags, "提示詞外洩"]; g.asrRisk = Math.max(g.asrRisk||0, 3); g.reviewed = false; }
     computeRisk(g); segs.set(g.id, g);
   }
-  renderSessSel(); $("#segList").innerHTML=""; render(); drawOrg(); pump();
+  renderSessSel(); $("#segList").innerHTML=""; render(); drawOrg(); pump(); renderTakes();
   migrateAudio(id);
 }
 async function migrateAudio(sid){
@@ -695,6 +699,7 @@ function delHandler(){
   $("#yesDel").onclick = async () => {
     for (const g of await bySid("segs",cur.id)) await delKey("segs", g.id);
     for (const s of await bySid("sources",cur.id)) await delKey("sources", s.id);
+    for (const c of await bySid("master",cur.id)) await delKey("master", c.id);
     await delKey("sessions", cur.id);
     sessions = sessions.filter(s=>s.id!==cur.id); if (!sessions.length) await newSession();
     resetDel(); await switchSession(sessions[0].id); storageInfo();
@@ -706,10 +711,11 @@ $("#delSess").onclick = delHandler;
 /* ================= 新增段落 ================= */
 function nextSeq(){ let m=0; segs.forEach(g=>{ if(g.seq>m) m=g.seq; }); return m+1; }
 async function addSegment(blob, meta){
+  meta = meta || {};
   const seq = nextSeq();
   const g = normalize({id:cur.id+":"+String(seq).padStart(5,"0"), sid:cur.id, seq, at:meta.at||Date.now(), dur:meta.dur||0, offset:meta.offset??null,
     blob:blob||null, ext:meta.ext||"webm", srcId:meta.srcId||null, start:meta.start??null, end:meta.end??null, src:meta.src||"mic",
-    voiced:meta.voiced??null, status:"queued"});
+    voiced:meta.voiced??null, status:"queued", gap:meta.gap||0, gapWhy:meta.gapWhy||""});
   if (meta.skip) { g.status="skip"; g.text=meta.skip; }
   if (meta.web && g.status !== "skip") { g.webPending = true; setTimeout(() => assignWeb(g), 2600); }
   segs.set(g.id, g); await saveSeg(g, true); render(); pump();
@@ -735,19 +741,23 @@ function startRecorder(){
     const blob = new Blob(chunks, {type: chunks[0]?.type || rec.mime || "audio/webm"});
     if (blob.size < 200) return;
     const v = mr._voiced || 0;
-    meta.dur = mr._dur; meta.voiced = v; meta.ext = extOf(blob.type) || rec.ext;
-    if (v < 0.6) meta.skip = v < 0.2 ? "（靜音）" : "（語音太短，已略過。若有內容請按「重做」）";
+    meta.dur = mr._dur ?? (performance.now() - mr._t0) / 1000; meta.voiced = v; meta.ext = extOf(blob.type) || rec.ext;
+    meta.gap = mr._gap || 0; meta.gapWhy = mr._gapWhy || "";
+    if (v < 0.25) meta.skip = "（靜音）";      // 很短但有聲音的話照樣送出轉錄，不再略過
     meta.web = (S.webasr || web.auto) && web.on;
     addSegment(blob, meta).catch(e => banner("save", "存檔失敗：" + e.message));
   };
-  mr.start();
-  rec.mr = mr; rec.segStart = performance.now(); rec.lastVoice = rec.segStart; rec.voiced = 0;
+  mr.start(); mr._t0 = performance.now();
+  rec.mr = mr; rec.segStart = performance.now(); rec.lastVoice = rec.segStart; rec.voiced = 0; rec.segGap = 0; rec.segGapWhy = "";
 }
 function cut(){
   if (!rec.mr) return;
-  const old = rec.mr; old._dur = (performance.now()-rec.segStart)/1000; old._voiced = rec.voiced;
-  if (rec.on && !rec.paused) startRecorder(); else rec.mr = null;   // 先接上新的錄音器再停舊的，不漏字
-  try { old.stop(); } catch {}
+  const old = rec.mr, t0 = rec.segStart; old._voiced = rec.voiced; old._gap = rec.segGap; old._gapWhy = rec.segGapWhy;
+  const keep = rec.on && !rec.paused;
+  if (keep) startRecorder(); else rec.mr = null;   // 先接上新的錄音器
+  // 舊的晚 0.5 秒才停：交接處重疊，避免 iPhone 編碼啟動延遲造成缺音
+  const stopIt = () => { old._dur = (performance.now() - t0) / 1000; try { old.stop(); } catch {} };
+  if (keep) setTimeout(stopIt, 500); else stopIt();
 }
 async function startRec(){
   if (S.hwkeys) hwArm();   // 必須在使用者按下的當下啟動，iOS 才會把耳機按鍵交給這個頁面
@@ -761,8 +771,11 @@ async function startRec(){
   rec.ctx = new AC();
   const src = rec.ctx.createMediaStreamSource(rec.stream); rec.an = rec.ctx.createAnalyser(); rec.an.fftSize = 1024; src.connect(rec.an);
   rec.buf = new Float32Array(rec.an.fftSize);
+  const trk = rec.stream.getAudioTracks()[0];
+  trk?.addEventListener("mute", () => { rec.muteAt = performance.now(); });
+  trk?.addEventListener("unmute", () => { if (rec.muteAt) { noteGap((performance.now() - rec.muteAt) / 1000, "麥克風被系統暫時佔用，例如來電或 Siri"); rec.muteAt = 0; } });
   rec.stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (rec.on) { stopRec(); banner("mic", "麥克風中斷（可能是裝置拔除或系統打斷），已停止錄音並保存目前內容。"); } });
-  rec.on = true; rec.t0 = performance.now(); rec.lastTick = rec.t0; startRecorder();
+  rec.on = true; rec.t0 = performance.now(); rec.lastTick = rec.t0; rec.gapCount = 0; banner("gap"); startRecorder(); masterStart();
   rec.iv = setInterval(tick, 50);
   web.finals = []; web.up = []; web.restarts = []; web.lastFinal = ""; web.interim = ""; web.zeroSince = 0;
   if (S.webasr || web.auto) webStart();
@@ -776,17 +789,24 @@ async function startRec(){
 function stopRec(){
   hwOff(); rec.paused = false; $("#pauseRecBtn").disabled = true;
   if (web.on || web.r) webStop(); banner("web");
-  rec.on = false; clearInterval(rec.iv); cut(); liveUI();
+  rec.on = false; clearInterval(rec.iv); cut(); masterStop(); liveUI();
   setTimeout(() => { try { if (navigator.audioSession) navigator.audioSession.type = "auto"; } catch {} }, 300);
   rec.stream?.getTracks().forEach(t=>t.stop()); rec.ctx?.close().catch(()=>{});
   try { rec.wake?.release(); } catch {}
   $("#recBtn").classList.remove("on"); $("#recBtn").setAttribute("aria-label","開始錄音"); $("#recState").textContent="已停止・按紅色按鈕繼續錄音"; $("#recState").classList.remove("on");
   $("#cutBtn").disabled=true; $("#lvl").style.width="0"; $("#segp").style.width="0";
 }
+function noteGap(sec, why){
+  if (!rec.on || rec.paused || sec < 1) return;
+  rec.segGap = (rec.segGap || 0) + sec; rec.segGapWhy = why;
+  rec.gapCount = (rec.gapCount || 0) + 1;
+  banner("gap", `⚠ 錄音可能中斷了約 ${Math.round(sec)} 秒（${why}）。已在該段標示，請保持本頁在前景、螢幕不要鎖定。`);
+}
 function tick(){
   rec.an.getFloatTimeDomainData(rec.buf);
   let sum=0; for (let i=0;i<rec.buf.length;i++) sum += rec.buf[i]*rec.buf[i];
   const rms = Math.sqrt(sum/rec.buf.length), now = performance.now(), dt = now - rec.lastTick; rec.lastTick = now;
+  if (dt > 1500) noteGap(dt / 1000, document.visibilityState === "hidden" ? "網頁切到背景或螢幕鎖定" : "系統暫停了網頁");
   $("#lvl").style.width = Math.min(100, Math.sqrt(rms/0.25)*100) + "%";
   if (rec.paused) return;
   if (rms > S.thr) { rec.lastVoice = now; rec.voiced += dt/1000; }
@@ -794,7 +814,12 @@ function tick(){
   const el = (now-rec.segStart)/1000;
   $("#timer").textContent = fmtT((now-rec.t0)/1000);
   $("#segp").style.width = Math.min(100, el/S.maxSec*100) + "%";
-  if (el >= S.maxSec) return cut();
+  if (el >= S.maxSec) {
+    if (rec.voiced < 0.2) return cut();                          // 幾乎無聲：照常切
+    if (rec.voiced < 0.6 && el < S.maxSec * 2) return;           // 只有一兩個字：併入下一段，不單獨成段
+    if (now - rec.lastVoice >= 300 || el >= S.maxSec + 15) return cut();   // 等到短暫停頓再切，避免切在字中間
+    return;
+  }
   if (S.mode==="auto" && el >= S.minSec && rec.voiced >= 0.6 && now - rec.lastVoice >= 700) return cut();
 }
 $("#recBtn").onclick = () => rec.on ? stopRec() : startRec();
@@ -813,12 +838,12 @@ function recStateUI(){
 }
 function pauseRec(){
   if (!rec.on || rec.paused) return;
-  rec.paused = true; cut(); beep("pause"); recStateUI(); hwState();
+  rec.paused = true; cut(); try { if (master.mr?.state === "recording") master.mr.pause(); } catch {} beep("pause"); recStateUI(); hwState();
   toast("錄音已暫停");
 }
 function resumeRec(){
   if (!rec.on || !rec.paused) return;
-  rec.paused = false; startRecorder(); beep("resume"); recStateUI(); hwState();
+  rec.paused = false; startRecorder(); try { if (master.mr?.state === "paused") master.mr.resume(); } catch {} beep("resume"); recStateUI(); hwState();
   toast("繼續錄音");
 }
 function beep(kind){
@@ -866,6 +891,47 @@ function hwOff(){
 }
 document.addEventListener("visibilitychange", async () => {
   if (rec.on && document.visibilityState==="visible") { try { rec.wake = await navigator.wakeLock?.request("screen"); } catch {} }
+});
+
+/* ================= 完整母帶（不切段、每 5 秒寫入一次） ================= */
+const master = {mr:null, take:null, idx:0, sid:null, t0:0};
+function masterStart(){
+  if (!S.master || !rec.stream) return;
+  let mr; const bps = S.kbps * 1000;
+  try { mr = new MediaRecorder(rec.stream, rec.mime ? {mimeType:rec.mime, audioBitsPerSecond:bps} : {audioBitsPerSecond:bps}); }
+  catch { try { mr = new MediaRecorder(rec.stream); } catch { return; } }
+  const take = {id:"tk" + Date.now().toString(36), at:Date.now(), ext:rec.ext, mime:mr.mimeType || rec.mime || "audio/webm", bytes:0, dur:0, ended:0, driveId:null};
+  cur.takes = (cur.takes || []).concat(take); put("sessions", cur).catch(() => {});
+  Object.assign(master, {mr, take, idx:0, sid:cur.id, t0:performance.now()});
+  const sid = cur.id;
+  mr.ondataavailable = e => {
+    if (!e.data || !e.data.size) return;
+    const i = master.mr === mr ? master.idx++ : (take._i = (take._i || 1000) + 1);
+    take.bytes += e.data.size;
+    put("master", {id:take.id + ":" + String(i).padStart(6, "0"), sid, take:take.id, i, blob:e.data}).catch(err => banner("save", "完整錄音存檔失敗：" + err.message));
+  };
+  mr.onstop = () => {
+    take.ended = Date.now(); take.dur = Math.round((take.ended - take.at) / 1000);
+    const s = sessions.find(x => x.id === sid); if (s) { const t = (s.takes || []).find(x => x.id === take.id); if (t) Object.assign(t, take); setTimeout(() => put("sessions", s).then(() => { driveDirty(sid); renderTakes(); }), 800); }
+  };
+  try { mr.start(5000); } catch { master.mr = null; }
+}
+function masterStop(){ const mr = master.mr; master.mr = null; try { if (mr && mr.state !== "inactive") mr.stop(); } catch {} }
+async function takeBlob(sid, take){
+  const parts = (await bySid("master", sid)).filter(c => c.take === take.id).sort((a,b) => a.i - b.i);
+  return new Blob(parts.map(c => c.blob), {type:take.mime || "audio/webm"});
+}
+async function renderTakes(){
+  const box = $("#takeList"); if (!box || !cur) return;
+  const ts = (cur.takes || []).filter(t => t.bytes > 0);
+  box.innerHTML = ts.length ? `<div class="note" style="margin-bottom:4px">完整錄音（不切段）</div>` + ts.map(t => `<div class="hist"><span class="t" style="color:var(--fg)">${new Date(t.at).toLocaleString("zh-TW",{hour12:false,month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}　${t.ended ? fmtT(t.dur) : "錄音中…"}　${MB(t.bytes)}${t.driveId ? "　已備份到 Drive" : ""}</span>${t.ended ? `<button type="button" data-take="${esc(t.id)}">下載</button>` : ""}</div>`).join("") : "";
+}
+$("#takeList").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-take]"); if (!b) return;
+  const t = (cur.takes || []).find(x => x.id === b.dataset.take); if (!t) return;
+  b.disabled = true;
+  try { const blob = await takeBlob(cur.id, t); download(`${fname("x").slice(0,-2)}_完整錄音_${new Date(t.at).toTimeString().slice(0,5).replace(":","")}.${t.ext || "webm"}`, blob); }
+  catch(err) { toast("下載失敗：" + err.message); } finally { b.disabled = false; }
 });
 
 /* ================= 音訊處理（解碼、切段、WAV） ================= */
@@ -1299,6 +1365,7 @@ function rowHTML(g){
         ${g.flags.map(flagChip).join("")}
         ${openN ? `<span class="chip e">待確認 ${openN}</span>` : ""}${g.orgNote ? `<span class="chip e">整理時標註</span>` : ""}
         ${g.edited ? `<span class="chip">已手改</span>` : ""}${g.reviewed && g.status!=="skip" ? `<span class="chip d">已確認</span>` : ""}
+        ${g.gap >= 1 ? `<span class="chip w" title="${esc(g.gapWhy)}">⚠ 中斷約 ${Math.round(g.gap)} 秒</span>` : ""}
         ${g.audioLost && !hasAudio(g) ? `<span class="chip">音檔遺失</span>` : ""}
         <span class="acts">${hasAudio(g) ? `<button type="button" data-act="play" aria-label="播放第 ${g.seq} 段">▶ 播放</button>` : ""}<button type="button" data-act="open">審閱</button></span>
         ${g.err && active ? `<span class="note err">${esc(g.err.slice(0,140))}</span>` : ""}
@@ -1449,6 +1516,8 @@ function drawTimeline(){
   });
   ctx.globalAlpha = 1; ctx.fillStyle = col("--err");
   list.forEach((g,i) => { if (needsReview(g)) ctx.fillRect(Math.min(w-3, i*bw), 0, Math.max(3, bw-gap), h); });
+  ctx.fillStyle = col("--warn");
+  list.forEach((g,i) => { if (g.gap >= 1) { const x = Math.min(w-4, i*bw); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x+6, 0); ctx.lineTo(x+3, 6); ctx.fill(); } });
   const ri = list.findIndex(g => g.id===rvId);
   if (ri >= 0) { ctx.fillStyle = col("--fg"); ctx.fillRect(Math.min(w-3, ri*bw), h-3, Math.max(3, bw-gap), 3); }
 }
@@ -1909,6 +1978,7 @@ async function exportZip(){
   if (cur.organized) files.push({name:"整理稿.md", data:cur.organized});
   list.forEach((g, i) => { if (g.blob) files.push({name:segsMeta[i].audioFile, data:g.blob}); });
   srcs.forEach((s, i) => files.push({name:srcMeta[i].file, data:s.blob}));
+  for (const t of (cur.takes || []).filter(t => t.ended && t.bytes)) files.push({name:`完整錄音/${t.id}.${t.ext || "webm"}`, data:await takeBlob(cur.id, t)});
   try { const z = await makeZip(files); download(fname("zip"), z); toast("已匯出 " + MB(z.size)); LS.set("lastExport_"+cur.id, Date.now()); banner("backup"); }
   catch(e){ toast("匯出失敗：" + e.message); }
 }
@@ -1926,6 +1996,8 @@ async function importZip(file){
     const nid = "src" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); srcMap[src.id] = nid;
     await put("sources", {id:nid, sid, name:src.name, type:src.type, blob:new Blob([d], {type:src.type || mimeOf(src.name)})});
   }
+  for (const t of s.takes || []) { const d = z[`完整錄音/${t.id}.${t.ext || "webm"}`]; if (d) await put("master", {id:t.id + ":000000", sid, take:t.id, i:0, blob:new Blob([d], {type:t.mime || mimeOf("x." + (t.ext || "webm"))})}); else t.bytes = 0; t.driveId = null; }
+  await put("sessions", s);
   for (const r of m.segments || []) {
     const g = normalize({...r, sid, id:sid + ":" + String(r.seq).padStart(5,"0")});
     g.blob = r.audioFile && z[r.audioFile] ? new Blob([z[r.audioFile]], {type:mimeOf(r.audioFile)}) : null;
@@ -2275,6 +2347,13 @@ async function driveSync(force){
       sess.driveFolderName = sess.name; await put("sessions", sess);
     }
     let changed = false;
+    for (const t of sess.takes || []) {
+      if (t.ended && t.bytes && !t.driveId) {
+        const blob = await takeBlob(sess.id, t);
+        t.driveId = await dUpload({name:`完整錄音_${new Date(t.at).toLocaleString("zh-TW",{hour12:false}).replace(/[\/:]/g,"-")}.${t.ext || "webm"}`, parents:[folder], appProperties:{gdTake:t.id}}, blob);
+        await put("sessions", sess); changed = true; renderTakes();
+      }
+    }
     for (const s of await bySid("sources", sess.id)) {
       if (s.blob && !s.driveId) { s.driveId = await dUpload({name:"原始_" + s.name, parents:[folder], appProperties:{gdSrc:s.id}}, s.blob); await put("sources", s); changed = true; }
     }
