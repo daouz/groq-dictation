@@ -13,7 +13,7 @@
 | 檔案 | 內容與重點 |
 |---|---|
 | `00-core.js` | 工具（`$`、`esc`、`toast`、`LS`）；設定：`DEF` 預設值、`S` 設定物件（localStorage `gd_settings`）、`TIER()` 依免費／開發者方案決定併發數與每次送出量；提示橫幅 `banner()` |
-| `10-store.js` | IndexedDB `groq-dictation` v3：`sessions`、`segs`、`sources`（上傳原檔）、`master`（完整母帶分塊）。**音檔一律以 ArrayBuffer 存入**（`put()`/`hydrate()`），因為 Safari 存 Blob 重新整理後會 NotFoundError。全域狀態 `segs`(Map)、`cur`、`normalize()`、`saveSeg()`、`needsReview()`；工作階段切換；`addSegment()` |
+| `10-store.js` | IndexedDB `groq-dictation` v4：`sessions`、`segs`（段落資料，不含音檔）、`segaudio`（段落音檔，key 同段落 id，只在錄好或換新時寫一次）、`sources`（上傳原檔）、`master`（完整母帶分塊）。**音檔一律以 ArrayBuffer 存入**，因為 Safari 存 Blob 重新整理後會 NotFoundError。段落一律經 `put("segs")`／`bySid("segs")`／`delKey("segs")` 存取，它們會一併處理 `segaudio`；`g._abFrom` 是「已存進 DB 的那個 Blob」，`g.blob` 被清掉且 `_abFrom` 有值才會刪音檔。v3 舊格式由 `migrateAudio()` 在開啟工作階段時逐段搬移。全域狀態 `segs`(Map)、`cur`、`normalize()`、`saveSeg()`、`needsReview()`；工作階段切換；`addSegment()` |
 | `20-record.js` | 每段一個 MediaRecorder；`cut()` 先開新的、舊的晚 0.5 秒停（重疊防漏音）；`tick()` 每 50ms：最長秒數到了等 0.3 秒停頓才切、有聲 <0.6 秒不單獨成段；`noteGap()` 偵測中斷。`pauseRec/resumeRec`；Media Session 耳機按鍵（`hwArm()` 必須在按錄音鍵當下呼叫）；完整母帶 `masterStart/Stop`（每 5 秒寫入 `master`，`cur.takes` 記錄） |
 | `30-audio.js` | `decodeTo16k`、`wav16`、`splitPCM`（上傳長檔依靜音切段，送出時才轉 16k WAV）、`segAudio()`、上傳檔案 |
 | `40-asr.js` | `groq()`（429 解析 "try again in"）；`analyze()` 濾除片尾套語（`HALLU`）、重複、低信心、提示詞外洩；`sim()` 兩模型比對、`applyBest()`；逐段修正 `FIX_SYS`、`fixBatch()`、`parseFix()`（回傳 `{segments:[{seq,text,issues}]}`） |
@@ -38,6 +38,7 @@
 ## 開發與驗證方式
 - 改完執行 `tools/check.sh`：每個 js 做 `node --check`、載入順序檢查、版本號檢查，最後跑冒煙測試（`--fast` 可略過瀏覽器）。
 - **改了 css／js 一定要執行 `node tools/stamp.mjs`** 更新 `index.html` 的 `?v=` 版本號，否則 iPhone 可能在 GitHub Pages 快取期間混用新舊檔案（`check.sh` 會擋下忘記更新的情況）。
+- 儲存測試 `tools/store-test.mjs`：v3→v4 搬移、存檔不重寫音檔、釋放本機空間、ZIP 往返、刪除工作階段。改 `10-store.js` 必跑。
 - 冒煙測試 `tools/smoke.mjs`：自帶靜態伺服器，以 iPhone 13 尺寸、模擬麥克風錄兩段 → 送轉錄（Groq 請求被攔截回 401）→ 暫停，並切換各檢視、開審閱面板；檢查無 pageerror、無左右捲動。`SHOTS=資料夾 tools/check.sh` 會存截圖。Playwright 在 `/opt/node22/lib/node_modules/playwright`，Chromium 在 `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`（可用環境變數 `PW`、`CHROME` 覆寫）。
 - 手動測試：`python3 -m http.server 8765`。錄音流程可用 `--use-fake-device-for-media-stream` 模擬麥克風（記得在 `#key` 填值，`readForm()` 會讀輸入框）。
 - 直接 commit 到 `main` 並 push，GitHub Pages 會自動更新。commit 訊息結尾附上系統要求的 attribution。
@@ -52,7 +53,7 @@
 ## 待辦（2026-10 程式檢視結果，依建議順序）
 以下是讀程式碼得出的判斷，尚未實測：
 1. ~~錄音偵測小修~~（2026-10 完成：`fftSize` 2048、有聲累計每次最多 0.25 秒、`tick()` 快取 DOM 並略過沒變的寫入）
-2. **音檔與段落資料分開存（建議做，中風險）**：`put("segs")` 每次狀態改變都整段重寫音檔（一小時約 260 MB 寫入，實需約 43 MB），切換工作階段也會把全部音檔載入記憶體。改成 DB v4 新增 `segaudio` store，音檔只寫一次、需要時才讀；要寫遷移。需 iPhone 實機驗證。
+2. ~~音檔與段落資料分開存~~（2026-10 完成：DB v4 `segaudio`，存檔不再重寫音檔，已在 Chromium 測過；**待 iPhone 實機確認**舊資料升級後能播放）。注意：v4 之後若要退回舊版程式，舊版開不了 v4 資料庫。尚未做的部分：切換工作階段仍會把該工作階段的音檔全部載入記憶體，可再改成需要時才讀。
 3. **上傳長檔記憶體**：`decodeTo16k` 以裝置取樣率與原聲道解碼整檔（1 小時立體聲約 1.4 GB），`pcmCache` 另常駐約 230 MB／小時。改用 `new AudioContext({sampleRate:16000})` 並降成單聲道。需 iPhone 確認。
 4. 即時錄音用固定 `S.thr`，上傳檔用自適應雜訊底，可統一並加進出雙門檻（行為會變，需實錄測試）。
 5. 0.5 秒重疊在話中切段（耳機按兩下、最長秒數強切）時可能重複 1–2 字，沒有處理；建議標記「疑似接縫重複」讓人工確認，不自動刪。

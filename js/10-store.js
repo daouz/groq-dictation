@@ -1,18 +1,27 @@
 "use strict";
 /* ================= IndexedDB ================= */
 let db;
-function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",3);
+/* v4：段落音檔移到獨立的 segaudio store（key 與段落 id 相同）。段落資料每次狀態改變都會存檔，
+   音檔分開後只在錄好或換新時寫一次，不再每次跟著整段重寫。
+   舊格式（音檔 ab 在段落記錄裡）照樣讀得到，開啟工作階段時由 migrateAudio() 逐段搬移：
+   每段一個交易，空間不足時停在一半也不會遺失，剩下的段落維持舊格式。 */
+function openDB(){ return new Promise((res,rej)=>{ const r=indexedDB.open("groq-dictation",4);
   r.onupgradeneeded=()=>{ const d=r.result;
     if(!d.objectStoreNames.contains("sessions")) d.createObjectStore("sessions",{keyPath:"id"});
     if(!d.objectStoreNames.contains("segs")) d.createObjectStore("segs",{keyPath:"id"}).createIndex("sid","sid");
     if(!d.objectStoreNames.contains("sources")) d.createObjectStore("sources",{keyPath:"id"}).createIndex("sid","sid");
-    if(!d.objectStoreNames.contains("master")) d.createObjectStore("master",{keyPath:"id"}).createIndex("sid","sid"); };
+    if(!d.objectStoreNames.contains("master")) d.createObjectStore("master",{keyPath:"id"}).createIndex("sid","sid");
+    if(!d.objectStoreNames.contains("segaudio")) d.createObjectStore("segaudio",{keyPath:"id"}).createIndex("sid","sid"); };
   r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>toast("請關閉其他開著本工具的分頁後重新整理"); }); }
 function req(store, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(store,mode); const q=fn(t.objectStore(store));
   t.oncomplete=()=>res(q ? q.result : undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error || new Error("儲存被中止")); }); }
+/* 多個 store 的交易；fn 可回傳一個函式，在交易完成後取結果 */
+function txn(stores, mode, fn){ return new Promise((res,rej)=>{ const t=db.transaction(stores,mode); const out=fn(t);
+  t.oncomplete=()=>res(typeof out==="function" ? out() : undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error || new Error("儲存被中止")); }); }
 /* 音檔以 ArrayBuffer 存進 IndexedDB：Safari 存 Blob 在重新整理後常讀不出來（NotFoundError） */
-const AUDIO_STORES = ["segs","sources","master"];
+const AUDIO_STORES = ["sources","master"];
 async function put(s, v){
+  if (s === "segs" && v) return putSeg(v);
   if (!AUDIO_STORES.includes(s) || !v) return req(s,"readwrite",o=>o.put(v));
   const {_ab, _abFrom, blob, ...r} = v;
   if (blob instanceof Blob) {
@@ -24,14 +33,44 @@ async function put(s, v){
   } else r.blob = null;
   return req(s,"readwrite",o=>o.put(r));
 }
+/* 段落：g._abFrom 記錄「已存進 segaudio 的那個 Blob」。
+   音檔沒換就只寫段落資料；g.blob 被清掉（釋放本機空間）且之前確實存過，才刪除音檔記錄。 */
+async function putSeg(v){
+  const {_ab, _abFrom, blob, ab, abType, ...r} = v; r.blob = null;
+  let audio = null, drop = false;
+  if (blob instanceof Blob) {
+    if (v._abFrom !== blob) {
+      try { audio = {id:v.id, sid:v.sid, ab:await blob.arrayBuffer(), type:blob.type || ""}; }
+      catch { v.blob = null; v._abFrom = null; v.audioLost = true; r.audioLost = true; return req("segs","readwrite",o=>o.put(r)); }
+    }
+  } else if (v._abFrom) drop = true;
+  await txn(["segs","segaudio"], "readwrite", t => {
+    t.objectStore("segs").put(r);
+    if (audio) t.objectStore("segaudio").put(audio);
+    if (drop) t.objectStore("segaudio").delete(v.id);
+  });
+  if (audio) v._abFrom = blob;
+  if (drop && !v.blob) v._abFrom = null;
+}
+/* 把音檔接回段落。舊格式（音檔還在段落記錄裡）不設 _abFrom，下次存檔時會搬進 segaudio */
+function withAudio(metas, auds){
+  const m = new Map(auds.map(a => [a.id, a]));
+  return metas.map(r => {
+    const a = m.get(r.id);
+    if (a) { r.blob = new Blob([a.ab], {type:a.type || ""}); r._abFrom = r.blob; }
+    else if (r.ab) { r.blob = new Blob([r.ab], {type:r.abType || ""}); delete r.ab; delete r.abType; }
+    return r;
+  });
+}
 function hydrate(r){
   if (r && r.ab) { r.blob = new Blob([r.ab], {type:r.abType || ""}); r._ab = r.ab; r._abFrom = r.blob; delete r.ab; delete r.abType; }
   return r;
 }
-const getAll = async s => { const a = await req(s,"readonly",o=>o.getAll()); return AUDIO_STORES.includes(s) ? a.map(hydrate) : a; };
-const getOne = async (s,k) => { const r = await req(s,"readonly",o=>o.get(k)); return AUDIO_STORES.includes(s) ? hydrate(r) : r; };
-const bySid = async (s,sid) => { const a = await req(s,"readonly",o=>o.index("sid").getAll(sid)); return AUDIO_STORES.includes(s) ? a.map(hydrate) : a; };
-const delKey = (s,k) => req(s,"readwrite",o=>o.delete(k));
+const segsRead = q => txn(["segs","segaudio"], "readonly", t => { const a = q(t.objectStore("segs")), b = q(t.objectStore("segaudio")); return () => withAudio([].concat(a.result || []), [].concat(b.result || [])); });
+const getAll = async s => { if (s === "segs") return segsRead(o => o.getAll()); const a = await req(s,"readonly",o=>o.getAll()); return AUDIO_STORES.includes(s) ? a.map(hydrate) : a; };
+const getOne = async (s,k) => { if (s === "segs") return (await segsRead(o => o.get(k)))[0]; const r = await req(s,"readonly",o=>o.get(k)); return AUDIO_STORES.includes(s) ? hydrate(r) : r; };
+const bySid = async (s,sid) => { if (s === "segs") return segsRead(o => o.index("sid").getAll(sid)); const a = await req(s,"readonly",o=>o.index("sid").getAll(sid)); return AUDIO_STORES.includes(s) ? a.map(hydrate) : a; };
+const delKey = (s,k) => s === "segs" ? txn(["segs","segaudio"], "readwrite", t => { t.objectStore("segs").delete(k); t.objectStore("segaudio").delete(k); }) : req(s,"readwrite",o=>o.delete(k));
 
 /* ================= 狀態 ================= */
 let sessions=[], cur=null, filter="all", paused=false, pausedReason="";
@@ -98,7 +137,10 @@ async function migrateAudio(sid){
   let lost = 0, fixed = 0;
   for (const g of sorted()) {
     if (cur?.id !== sid) return;
-    if (g.blob && !g._ab) { await put("segs", g); if (g.audioLost) { lost++; touch(g); computeRisk(g); } else fixed++; }
+    if (g.blob && !g._abFrom) {
+      try { await put("segs", g); } catch(e) { banner("quota", "儲存空間不足，舊錄音的格式轉換暫停（音檔仍保留）。請匯出 ZIP 後刪除舊的工作階段。"); console.error(e); break; }
+      if (g.audioLost) { lost++; touch(g); computeRisk(g); } else fixed++;
+    }
   }
   for (const src of await bySid("sources", sid)) if (src.blob && !src._ab) await put("sources", src);
   if (lost) { render(); banner("lost", `有 ${lost} 段舊錄音的音檔在這個瀏覽器裡已經讀不出來（Safari 的儲存問題），文字仍保留。新錄的音檔已改用穩定的方式保存。`); }
